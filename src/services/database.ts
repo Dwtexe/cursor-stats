@@ -11,7 +11,7 @@ let dbConnection: sqlite3.Database | null = null;
 export function getCursorDBPath(): string {
     const appName = vscode.env.appName;
     const folderName = appName === 'Cursor Nightly' ? 'Cursor Nightly' : 'Cursor';
-    
+
     if (process.platform === 'win32') {
         return path.join(process.env.APPDATA || '', folderName, 'User', 'globalStorage', 'state.vscdb');
     } else if (process.platform === 'linux') {
@@ -123,8 +123,30 @@ export async function initializeDatabase(): Promise<void> {
 
     return new Promise((resolve) => {
         const dbPath = getCursorDBPath();
-        
+
         try {
+            // For Apple Silicon, try to load the ARM-specific build first
+            if (process.platform === 'darwin' && process.arch === 'arm64') {
+                log('Detected Apple Silicon, attempting to use ARM-specific build...');
+                try {
+                    // Force reload of sqlite3 module
+                    delete require.cache[require.resolve('sqlite3')];
+                    const sqlite3 = require('sqlite3');
+                    dbConnection = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err: SQLiteError) => {
+                        if (!err) {
+                            log('Successfully opened database with ARM-specific build');
+                            resolve();
+                            return;
+                        }
+                        // If ARM-specific build fails, continue to fallback
+                        log('ARM-specific build failed, trying fallback...', true);
+                    });
+                } catch (armError) {
+                    log('Error with ARM-specific build: ' + armError, true);
+                }
+            }
+
+            // Standard initialization or fallback for ARM
             dbConnection = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
                 if (err) {
                     const sqlError = err as SQLiteError;
@@ -137,16 +159,28 @@ export async function initializeDatabase(): Promise<void> {
                     }), true);
 
                     if (process.platform === 'darwin' && process.arch === 'arm64') {
-                        log('Detected Apple Silicon, attempting to rebuild sqlite3...', true);
+                        log('Attempting to rebuild sqlite3 for ARM64...', true);
                         try {
                             const { execSync } = require('child_process');
-                            execSync('npm rebuild sqlite3 --build-from-source --target_arch=arm64', {
-                                stdio: 'inherit'
+                            // More robust rebuild command
+                            execSync('npm rebuild sqlite3 --build-from-source --target_arch=arm64 --verbose', {
+                                stdio: 'inherit',
+                                env: {
+                                    ...process.env,
+                                    CFLAGS: '-arch arm64',
+                                    CXXFLAGS: '-arch arm64',
+                                    LDFLAGS: '-arch arm64'
+                                }
                             });
-                            
-                            dbConnection = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (rebuildErr) => {
+
+                            // Force reload of sqlite3 after rebuild
+                            delete require.cache[require.resolve('sqlite3')];
+                            const sqlite3 = require('sqlite3');
+
+                            dbConnection = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (rebuildErr: SQLiteError) => {
                                 if (rebuildErr) {
                                     log('Failed to open database after rebuild: ' + rebuildErr, true);
+                                    log('Please ensure Xcode Command Line Tools are installed (xcode-select --install)', true);
                                     dbConnection = null;
                                     resolve();
                                 } else {
@@ -156,6 +190,7 @@ export async function initializeDatabase(): Promise<void> {
                             });
                         } catch (rebuildError) {
                             log('Failed to rebuild sqlite3: ' + rebuildError, true);
+                            log('Please ensure Xcode Command Line Tools are installed (xcode-select --install)', true);
                             dbConnection = null;
                             resolve();
                         }
