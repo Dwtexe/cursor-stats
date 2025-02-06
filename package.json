@@ -2,7 +2,7 @@
   "name": "cursor-stats",
   "displayName": "Cursor Stats",
   "description": "A Cursor extension for monitoring usage.",
-  "version": "1.0.5-beta.3",
+  "version": "1.0.6-beta.1",
   "publisher": "Dwtexe",
   "icon": "images/icon.png",
   "repository": {
@@ -59,6 +59,17 @@
           "default": false,
           "description": "Enable detailed logging for debugging purposes"
         },
+        "cursorStats.statusBarColor": {
+          "type": "string",
+          "default": "#4CAF50",
+          "description": "Custom color for the status bar (hex format)",
+          "pattern": "^#([A-Fa-f0-9]{6})$"
+        },
+        "cursorStats.showExtendedUsage": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show extended usage information in status bar (usage/total)"
+        },
         "cursorStats.enableStatusBarColors": {
           "type": "boolean",
           "default": true,
@@ -71,7 +82,11 @@
         },
         "cursorStats.usageAlertThresholds": {
           "type": "array",
-          "default": [75, 90, 100],
+          "default": [
+            75,
+            90,
+            100
+          ],
           "description": "Percentage thresholds at which to show usage alerts",
           "items": {
             "type": "number",
@@ -84,14 +99,16 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "webpack --mode production",
+    "watch": "webpack --mode development --watch",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "vscode-test",
-    "postinstall": "node scripts/postinstall.js"
+    "postinstall": "node scripts/postinstall.js",
+    "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/mocha": "^10.0.6",
     "@types/node": "18.x",
@@ -101,12 +118,14 @@
     "@vscode/test-cli": "^0.0.4",
     "@vscode/test-electron": "^2.3.8",
     "eslint": "^8.56.0",
-    "typescript": "^5.3.3"
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
   },
   "dependencies": {
     "axios": "^1.6.2",
-    "jsonwebtoken": "^9.0.2",
-    "semver": "^7.5.4",
-    "sqlite3": "^5.1.7"
+    "better-sqlite3": "^9.4.3",
+    "jsonwebtoken": "^9.0.2"
   }
 }

@@ -92,3 +92,55 @@ export async function checkForUpdates(lastReleaseCheck: number, RELEASE_CHECK_IN
 		log('[GitHub] No updates available');
 	}
 }
+
+export class GithubService {
+    private static instance: GithubService;
+    private baseUrl = 'https://api.github.com';
+    private owner = 'Dwtexe';
+    private repo = 'cursor-stats';
+
+    private constructor() {}
+
+    public static getInstance(): GithubService {
+        if (!GithubService.instance) {
+            GithubService.instance = new GithubService();
+        }
+        return GithubService.instance;
+    }
+
+    public async getLatestRelease(): Promise<string | undefined> {
+        try {
+            const response = await axios.get(`${this.baseUrl}/repos/${this.owner}/${this.repo}/releases/latest`);
+            return response.data.tag_name;
+        } catch (error) {
+            log(`Error fetching latest release: ${error}`, true);
+            return undefined;
+        }
+    }
+
+    public async checkForUpdates(currentVersion: string): Promise<boolean> {
+        const latestVersion = await this.getLatestRelease();
+        if (!latestVersion) {
+            return false;
+        }
+
+        // Remove 'v' prefix if present
+        const current = currentVersion.replace(/^v/, '');
+        const latest = latestVersion.replace(/^v/, '');
+
+        // Compare versions
+        const currentParts = current.split('.').map(Number);
+        const latestParts = latest.split('.').map(Number);
+
+        for (let i = 0; i < 3; i++) {
+            if (latestParts[i] > currentParts[i]) {
+                return true;
+            }
+            if (latestParts[i] < currentParts[i]) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+}

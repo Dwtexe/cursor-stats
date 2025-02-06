@@ -1,16 +1,79 @@
 import * as vscode from 'vscode';
+import { DatabaseService } from '../services/database';
 import { log } from '../utils/logger';
-import { getCurrentUsageLimit } from '../services/api';
-import { getCursorTokenFromDB } from '../services/database';
+import { getCurrentUsageLimit, apiService } from '../services/api';
+import { getSessionToken } from '../services/database';
 
+export class StatusBarHandler {
+    private statusBarItem: vscode.StatusBarItem;
+    private dbService: DatabaseService;
 
-let statusBarItem: vscode.StatusBarItem;
+    constructor(context: vscode.ExtensionContext) {
+        this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        this.dbService = DatabaseService.getInstance();
+        this.statusBarItem.command = 'cursor-stats.refreshStats';
+        context.subscriptions.push(this.statusBarItem);
+        this.refresh();
+    }
 
-export function createStatusBarItem(): vscode.StatusBarItem {
-    log('[Status Bar] Creating status bar item...');
-    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    log('[Status Bar] Status bar alignment: Right, Priority: 100');
-    return statusBarItem;
+    public async refresh(): Promise<void> {
+        try {
+            const token = await this.dbService.getSetting('sessionToken');
+            if (!token) {
+                this.statusBarItem.text = '$(sync) Cursor Stats: No token';
+                this.statusBarItem.tooltip = 'Click to refresh';
+                this.statusBarItem.show();
+                return;
+            }
+
+            const limit = await getCurrentUsageLimit(token);
+            if (!limit) {
+                this.statusBarItem.text = '$(sync) Cursor Stats: No limit set';
+                this.statusBarItem.tooltip = 'Click to refresh';
+                this.statusBarItem.show();
+                return;
+            }
+
+            const usage = this.dbService.getTotalUsage();
+            const percentage = Math.round((usage / Number(limit)) * 100);
+
+            const config = vscode.workspace.getConfiguration('cursorStats');
+            const showExtended = config.get<boolean>('showExtendedUsage', false);
+            const enableColors = config.get<boolean>('enableStatusBarColors', true);
+            const customColor = config.get<string>('statusBarColor', '#4CAF50');
+
+            let statusText = showExtended ?
+                `$(sync) Cursor Stats: ${usage}/${limit} (${percentage}%)` :
+                `$(sync) Cursor Stats: ${percentage}%`;
+
+            this.statusBarItem.text = statusText;
+            this.statusBarItem.tooltip = `${usage} tokens used out of ${limit} (${percentage}%)`;
+
+            if (enableColors) {
+                if (percentage >= 90) {
+                    this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+                } else if (percentage >= 75) {
+                    this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+                } else {
+                    this.statusBarItem.backgroundColor = undefined;
+                    if (customColor) {
+                        this.statusBarItem.color = customColor;
+                    }
+                }
+            }
+
+            this.statusBarItem.show();
+        } catch (error) {
+            log(`Error refreshing status bar: ${error}`, true);
+            this.statusBarItem.text = '$(error) Cursor Stats: Error';
+            this.statusBarItem.tooltip = 'Error refreshing stats';
+            this.statusBarItem.show();
+        }
+    }
+
+    public dispose(): void {
+        this.statusBarItem.dispose();
+    }
 }
 
 export function formatTooltipLine(text: string, maxWidth: number = 50): string {
@@ -53,7 +116,7 @@ export function formatRelativeTime(dateString: string): string {
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = date.getMinutes().toString().padStart(2, '0');
     const seconds = date.getSeconds().toString().padStart(2, '0');
-    
+
     return `${hours}:${minutes}:${seconds}`;
 }
 
@@ -63,146 +126,74 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
     tooltip.supportHtml = true;
     tooltip.supportThemeIcons = true;
 
-    // Header section with centered title
-    tooltip.appendMarkdown('<div align="center">\n\n');
-    tooltip.appendMarkdown('## ⚡ Cursor Usage\n\n');
-    tooltip.appendMarkdown('</div>\n\n');
-
     if (isError) {
         tooltip.appendMarkdown('> ⚠️ **Error State**\n\n');
         tooltip.appendMarkdown(lines.join('\n\n'));
-    } else {
-        // Premium Requests Section
-        if (lines.some(line => line.includes('Premium Fast Requests'))) {
-            tooltip.appendMarkdown('<div align="center">\n\n');
-            tooltip.appendMarkdown('### 🚀 Premium Fast Requests\n\n');
-            tooltip.appendMarkdown('</div>\n\n');
-            
-            // Extract and format premium request info
-            const requestLine = lines.find(line => line.includes('requests used'));
-            const percentLine = lines.find(line => line.includes('utilized'));
-            const startOfMonthLine = lines.find(line => line.includes('Fast Requests Period:'));
-            
-            if (requestLine) {
-                tooltip.appendMarkdown(`**Usage:** ${requestLine.split('•')[1].trim()}\n\n`);
-                if (percentLine) {
-                    tooltip.appendMarkdown(`**Progress:** ${percentLine.split('📊')[1].trim()}\n\n`);
-                }
-                if (startOfMonthLine) {
-                    tooltip.appendMarkdown(`**Period:** ${startOfMonthLine.split(':')[1].trim()}\n\n`);
-                }
-            }
-        }
-
-        // Usage Based Pricing Section
-        const token = await getCursorTokenFromDB();
-        let isEnabled = false;
-
-        if (token) {
-            try {
-                const limitResponse = await getCurrentUsageLimit(token);
-                isEnabled = !limitResponse.noUsageBasedAllowed;
-                const costLine = lines.find(line => line.includes('Total Cost:'));
-                const totalCost = costLine ? parseFloat(costLine.split('$')[1]) : 0;
-                const usageBasedPeriodLine = lines.find(line => line.includes('Usage Based Period:'));
-
-                tooltip.appendMarkdown('<div align="center">\n\n');
-                tooltip.appendMarkdown(`### 📈 Usage-Based Pricing (${isEnabled ? 'Enabled' : 'Disabled'})\n\n`);
-                tooltip.appendMarkdown('</div>\n\n');
-                
-                if (isEnabled && limitResponse.hardLimit) {
-                    const usagePercentage = ((totalCost / limitResponse.hardLimit) * 100).toFixed(1);
-                    const usageEmoji = getUsageLimitEmoji(totalCost, limitResponse.hardLimit);
-                    tooltip.appendMarkdown(`**Monthly Limit:** $${limitResponse.hardLimit.toFixed(2)} (${usagePercentage}% used) ${usageEmoji}\n\n`);
-                    if (usageBasedPeriodLine) {
-                        tooltip.appendMarkdown(`**Period:** ${usageBasedPeriodLine.split(':')[1].trim()}\n\n`);
-                    }
-                } else if (!isEnabled) {
-                    tooltip.appendMarkdown('> ℹ️ Usage-based pricing is currently disabled\n\n');
-                }
-                
-                // Show usage details regardless of enabled/disabled status
-                const pricingLines = lines.filter(line => line.includes('*') && line.includes('➜'));
-                if (pricingLines.length > 0) {
-                    const costLine = lines.find(line => line.includes('Total Cost:'));
-                    const totalCost = costLine ? costLine.split('Total Cost:')[1].trim() : '';
-                    
-                    tooltip.appendMarkdown(`**Current Usage** (Total: ${totalCost}):\n\n`);
-                    pricingLines.forEach(line => {
-                        const [calc, cost] = line.split('➜').map(part => part.trim());
-                        tooltip.appendMarkdown(`• ${calc.replace('•', '').trim()} → ${cost}\n\n`);
-                    });
-                } else {
-                    tooltip.appendMarkdown('> ℹ️ No usage recorded for this period\n\n');
-                }
-            } catch (error: any) {
-                log('[API] Error fetching limit for tooltip: ' + error.message, true);
-                tooltip.appendMarkdown('> ⚠️ Error checking usage-based pricing status\n\n');
-            }
-        } else {
-            tooltip.appendMarkdown('> ⚠️ Unable to check usage-based pricing status\n\n');
-        }
+        return tooltip;
     }
 
-    // Action Buttons Section with new compact design
-    tooltip.appendMarkdown('---\n\n');
-    tooltip.appendMarkdown('<div align="center">\n\n');
-    
-    // First row: Account and Extension settings
-    tooltip.appendMarkdown('🌐 [Account Settings](https://www.cursor.com/settings) • ');
-    tooltip.appendMarkdown('⚙️ [Extension Settings](command:workbench.action.openSettings?%22@ext%3ADwtexe.cursor-stats%22)\n\n');
-    
-    // Second row: Usage Based Pricing, Refresh, and Last Updated
-    const updatedLine = lines.find(line => line.includes('Last Updated:'));
-    const updatedTime = updatedLine ? formatRelativeTime(updatedLine.split(':').slice(1).join(':').trim()) : new Date().toLocaleTimeString();
-    
-    tooltip.appendMarkdown('💰 [Usage Based Pricing](command:cursor-stats.setLimit) • ');
-    tooltip.appendMarkdown('🔄 [Refresh](command:cursor-stats.refreshStats) • ');
-    tooltip.appendMarkdown(`🕒 ${updatedTime}\n\n`);
-    
-    tooltip.appendMarkdown('</div>');
+    const token = await getSessionToken();
+    if (!token) {
+        tooltip.appendMarkdown('> ⚠️ No session token found\n\n');
+        return tooltip;
+    }
 
-    return tooltip;
+    try {
+        const limit = await getCurrentUsageLimit(token);
+        const isEnabled = !!limit;
+
+        tooltip.appendMarkdown('<div align="center">\n\n');
+        tooltip.appendMarkdown('## Cursor Usage\n\n');
+        tooltip.appendMarkdown('</div>\n\n');
+
+        if (isEnabled && limit) {
+            const usage = lines.find(line => line.includes('tokens used'))?.split(' ')[0];
+            if (usage) {
+                const percentage = Math.round((Number(usage) / limit) * 100);
+                const emoji = getUsageEmoji(percentage);
+                tooltip.appendMarkdown(`**Usage:** ${usage} / ${limit} tokens (${percentage}%) ${emoji}\n\n`);
+            }
+        }
+
+        tooltip.appendMarkdown('---\n\n');
+        tooltip.appendMarkdown('<div align="center">\n\n');
+        tooltip.appendMarkdown('🌐 [Account Settings](https://www.cursor.com/settings) • ');
+        tooltip.appendMarkdown('⚙️ [Extension Settings](command:workbench.action.openSettings?%22@ext%3ADwtexe.cursor-stats%22)\n\n');
+        tooltip.appendMarkdown('💰 [Usage Based Pricing](command:cursor-stats.setLimit) • ');
+        tooltip.appendMarkdown('🔄 [Refresh](command:cursor-stats.refreshStats)\n\n');
+        tooltip.appendMarkdown('</div>');
+
+        return tooltip;
+    } catch (error) {
+        tooltip.appendMarkdown('> ⚠️ Error fetching usage data\n\n');
+        return tooltip;
+    }
 }
 
-export function getStatusBarColor(percentage: number): vscode.ThemeColor {
-    // Check if status bar colors are enabled in settings
+export function getStatusBarColor(percentage: number): string | vscode.ThemeColor {
     const config = vscode.workspace.getConfiguration('cursorStats');
     const colorsEnabled = config.get<boolean>('enableStatusBarColors', true);
-    
+    const customColor = config.get<string>('statusBarColor', '#4CAF50');
+
     if (!colorsEnabled) {
-        return new vscode.ThemeColor('statusBarItem.foreground');
+        return customColor;
     }
 
-    if (percentage >= 95) {
-        return new vscode.ThemeColor('charts.red');
-    } else if (percentage >= 90) {
-        return new vscode.ThemeColor('errorForeground');
-    } else if (percentage >= 85) {
-        return new vscode.ThemeColor('testing.iconFailed');
-    } else if (percentage >= 80) {
-        return new vscode.ThemeColor('notebookStatusErrorIcon.foreground');
-    } else if (percentage >= 75) {
-        return new vscode.ThemeColor('charts.yellow');
-    } else if (percentage >= 70) {
-        return new vscode.ThemeColor('notebookStatusRunningIcon.foreground');
-    } else if (percentage >= 65) {
-        return new vscode.ThemeColor('charts.orange');
-    } else if (percentage >= 60) {
-        return new vscode.ThemeColor('charts.blue');
-    } else if (percentage >= 50) {
-        return new vscode.ThemeColor('charts.green');
-    } else if (percentage >= 40) {
-        return new vscode.ThemeColor('testing.iconPassed');
-    } else if (percentage >= 30) {
-        return new vscode.ThemeColor('terminal.ansiGreen');
-    } else if (percentage >= 20) {
-        return new vscode.ThemeColor('symbolIcon.classForeground');
-    } else if (percentage >= 10) {
-        return new vscode.ThemeColor('debugIcon.startForeground');
-    } else {
-        return new vscode.ThemeColor('foreground');
-    }
+    if (percentage >= 95) return new vscode.ThemeColor('charts.red');
+    if (percentage >= 90) return new vscode.ThemeColor('errorForeground');
+    if (percentage >= 85) return new vscode.ThemeColor('testing.iconFailed');
+    if (percentage >= 80) return new vscode.ThemeColor('notebookStatusErrorIcon.foreground');
+    if (percentage >= 75) return new vscode.ThemeColor('charts.yellow');
+    if (percentage >= 70) return new vscode.ThemeColor('notebookStatusRunningIcon.foreground');
+    if (percentage >= 65) return new vscode.ThemeColor('charts.orange');
+    if (percentage >= 60) return new vscode.ThemeColor('charts.blue');
+    if (percentage >= 50) return new vscode.ThemeColor('charts.green');
+    if (percentage >= 40) return new vscode.ThemeColor('testing.iconPassed');
+    if (percentage >= 30) return new vscode.ThemeColor('terminal.ansiGreen');
+    if (percentage >= 20) return new vscode.ThemeColor('symbolIcon.classForeground');
+    if (percentage >= 10) return new vscode.ThemeColor('debugIcon.startForeground');
+
+    return customColor;
 }
 
 export function getUsageEmoji(percentage: number): string {
@@ -219,4 +210,14 @@ export function getMonthName(month: number): string {
         'September', 'October', 'November', 'December'
     ];
     return months[month - 1];
+}
+
+export function formatStatusBarText(usage: number, total: number): string {
+    const config = vscode.workspace.getConfiguration('cursorStats');
+    const showExtended = config.get<boolean>('showExtendedUsage', false);
+
+    if (showExtended) {
+        return `${usage.toFixed(2)} / ${total.toFixed(2)}`;
+    }
+    return usage.toFixed(2);
 }

@@ -1,86 +1,160 @@
-import * as sqlite3 from 'sqlite3';
+import * as vscode from 'vscode';
+import Database from 'better-sqlite3';
 import * as path from 'path';
 import * as os from 'os';
 import * as jwt from 'jsonwebtoken';
-import * as vscode from 'vscode';
 import { SQLiteRow, SQLiteError, TimingInfo, ComposerData } from '../interfaces/types';
 import { log } from '../utils/logger';
 
-let dbConnection: sqlite3.Database | null = null;
+export class DatabaseService {
+    private db: Database.Database;
+    private static instance: DatabaseService;
 
-export function getCursorDBPath(): string {
-    const appName = vscode.env.appName;
-    const folderName = appName === 'Cursor Nightly' ? 'Cursor Nightly' : 'Cursor';
-
-    if (process.platform === 'win32') {
-        return path.join(process.env.APPDATA || '', folderName, 'User', 'globalStorage', 'state.vscdb');
-    } else if (process.platform === 'linux') {
-        const isWSL = process.env.WSL_DISTRO_NAME || process.env.IS_WSL;
-        if (isWSL) {
-            const windowsUsername = process.env.WIN_USER || process.env.USERNAME || '';
-            if (windowsUsername) {
-                return path.join('/mnt/c/Users', windowsUsername, 'AppData/Roaming', folderName, 'User/globalStorage/state.vscdb');
-            }
-        }
-        return path.join(os.homedir(), '.config', folderName, 'User', 'globalStorage', 'state.vscdb');
-    } else if (process.platform === 'darwin') {
-        return path.join(os.homedir(), 'Library', 'Application Support', folderName, 'User', 'globalStorage', 'state.vscdb');
+    private constructor() {
+        const dbPath = path.join(process.cwd(), '.cursor-stats.db');
+        this.db = new Database(dbPath);
+        this.initializeDatabase();
     }
-    return path.join(os.homedir(), '.config', folderName, 'User', 'globalStorage', 'state.vscdb');
+
+    public static getInstance(): DatabaseService {
+        if (!DatabaseService.instance) {
+            DatabaseService.instance = new DatabaseService();
+        }
+        return DatabaseService.instance;
+    }
+
+    private initializeDatabase(): void {
+        try {
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS usage_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    tokens_used INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+            `);
+        } catch (error) {
+            console.error('Failed to initialize database:', error);
+            throw error;
+        }
+    }
+
+    public addUsage(tokensUsed: number): void {
+        const date = new Date().toISOString().split('T')[0];
+        try {
+            const stmt = this.db.prepare('INSERT INTO usage_stats (date, tokens_used) VALUES (?, ?)');
+            stmt.run(date, tokensUsed);
+        } catch (error) {
+            console.error('Failed to add usage:', error);
+            throw error;
+        }
+    }
+
+    public getUsageForDate(date: string): number {
+        try {
+            const stmt = this.db.prepare('SELECT SUM(tokens_used) as total FROM usage_stats WHERE date = ?');
+            const result = stmt.get(date) as { total: number };
+            return result.total || 0;
+        } catch (error) {
+            console.error('Failed to get usage for date:', error);
+            return 0;
+        }
+    }
+
+    public getTotalUsage(): number {
+        try {
+            const stmt = this.db.prepare('SELECT SUM(tokens_used) as total FROM usage_stats');
+            const result = stmt.get() as { total: number };
+            return result.total || 0;
+        } catch (error) {
+            console.error('Failed to get total usage:', error);
+            return 0;
+        }
+    }
+
+    public getUsageHistory(days: number = 30): Array<{ date: string; tokens: number }> {
+        try {
+            const stmt = this.db.prepare(`
+                SELECT date, SUM(tokens_used) as tokens
+                FROM usage_stats
+                WHERE date >= date('now', ?)
+                GROUP BY date
+                ORDER BY date DESC
+            `);
+            return stmt.all(`-${days} days`) as Array<{ date: string; tokens: number }>;
+        } catch (error) {
+            console.error('Failed to get usage history:', error);
+            return [];
+        }
+    }
+
+    public setSetting(key: string, value: string): void {
+        try {
+            const stmt = this.db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+            stmt.run(key, value);
+        } catch (error) {
+            console.error('Failed to set setting:', error);
+            throw error;
+        }
+    }
+
+    public getSetting(key: string): string | null {
+        try {
+            const stmt = this.db.prepare('SELECT value FROM settings WHERE key = ?');
+            const result = stmt.get(key) as { value: string } | undefined;
+            return result ? result.value : null;
+        } catch (error) {
+            console.error('Failed to get setting:', error);
+            return null;
+        }
+    }
+
+    public close(): void {
+        try {
+            this.db.close();
+        } catch (error) {
+            console.error('Failed to close database:', error);
+        }
+    }
 }
 
-export async function getCursorTokenFromDB(): Promise<string | undefined> {
+export function getCursorDBPath(): string {
+    const platform = process.platform;
+    let appDataPath;
+
+    switch (platform) {
+        case 'win32':
+            appDataPath = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+            return path.join(appDataPath, 'Cursor', 'Session Storage', 'cursor.db');
+        case 'darwin':
+            appDataPath = path.join(os.homedir(), 'Library', 'Application Support');
+            return path.join(appDataPath, 'Cursor', 'Session Storage', 'cursor.db');
+        case 'linux':
+            appDataPath = path.join(os.homedir(), '.config');
+            return path.join(appDataPath, 'Cursor', 'Session Storage', 'cursor.db');
+        default:
+            throw new Error(`Unsupported platform: ${platform}`);
+    }
+}
+
+export async function getSessionToken(): Promise<string | undefined> {
     return new Promise((resolve) => {
         const dbPath = getCursorDBPath();
 
-        log(`Platform: ${process.platform}`);
-        log(`Home directory: ${os.homedir()}`);
-        log(`Attempting to open database at: ${dbPath}`);
+        log(`Attempting to read token from database at: ${dbPath}`);
         log(`Database path exists: ${require('fs').existsSync(dbPath)}`);
 
-        const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
-            if (err) {
-                const sqlError = err as SQLiteError;
-                log('Error opening database: ' + err, true);
-                log('Database error details: ' + JSON.stringify({
-                    code: sqlError.code,
-                    errno: sqlError.errno,
-                    message: sqlError.message,
-                    path: dbPath
-                }), true);
-                resolve(undefined);
-                return;
-            }
+        try {
+            const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+            const stmt = db.prepare("SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'");
+            const row = stmt.get() as { value: string } | undefined;
 
-            log('Successfully opened database connection');
-        });
-
-        log('Executing SQL query for token...');
-        db.get("SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'", [], (err, row: SQLiteRow) => {
-            if (err) {
-                const sqlError = err as SQLiteError;
-                log('Error querying database: ' + err, true);
-                log('Query error details: ' + JSON.stringify({
-                    code: sqlError.code,
-                    errno: sqlError.errno,
-                    message: sqlError.message
-                }), true);
-                db.close();
-                resolve(undefined);
-                return;
-            }
-
-            log(`Query completed. Row found: ${!!row}`);
-            db.close();
-
-            if (!row) {
-                log('No token found in database');
-                resolve(undefined);
-                return;
-            }
-
-            try {
-                log('Processing token from database...');
+            if (row) {
+                log('Query completed. Row found: true');
                 const token = row.value;
                 log(`Token length: ${token.length}`);
                 log(`Token starts with: ${token.substring(0, 20)}...`);
@@ -88,169 +162,48 @@ export async function getCursorTokenFromDB(): Promise<string | undefined> {
                 const decoded = jwt.decode(token, { complete: true });
                 log(`JWT decoded successfully: ${!!decoded}`);
                 log(`JWT payload exists: ${!!(decoded && decoded.payload)}`);
-                log(`JWT sub exists: ${!!(decoded && decoded.payload && decoded.payload.sub)}`);
+                log(`JWT sub exists: ${!!(decoded && decoded.payload && (decoded as any).payload.sub)}`);
 
-                if (!decoded || !decoded.payload || !decoded.payload.sub) {
+                if (!decoded || !decoded.payload || !(decoded as any).payload.sub) {
                     log('Invalid JWT structure: ' + JSON.stringify({ decoded }), true);
                     resolve(undefined);
                     return;
                 }
 
-                const sub = decoded.payload.sub.toString();
+                const sub = (decoded as any).payload.sub.toString();
                 log(`Sub value: ${sub}`);
                 const userId = sub.split('|')[1];
                 log(`Extracted userId: ${userId}`);
                 const sessionToken = `${userId}%3A%3A${token}`;
                 log(`Created session token, length: ${sessionToken.length}`);
                 resolve(sessionToken);
-            } catch (error: any) {
-                log('Error processing token: ' + error, true);
-                log('Error details: ' + JSON.stringify({
-                    name: error.name,
-                    message: error.message,
-                    stack: error.stack
-                }), true);
+            } else {
+                log('No token found in database');
                 resolve(undefined);
             }
-        });
-    });
-}
 
-export async function initializeDatabase(): Promise<void> {
-    if (dbConnection) {
-        return;
-    }
-
-    return new Promise((resolve) => {
-        const dbPath = getCursorDBPath();
-
-        try {
-            // For Apple Silicon, try to load the ARM-specific build first
-            if (process.platform === 'darwin' && process.arch === 'arm64') {
-                log('Detected Apple Silicon, attempting to use ARM-specific build...');
-                try {
-                    // Force reload of sqlite3 module
-                    delete require.cache[require.resolve('sqlite3')];
-                    const sqlite3 = require('sqlite3');
-                    dbConnection = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err: SQLiteError) => {
-                        if (!err) {
-                            log('Successfully opened database with ARM-specific build');
-                            resolve();
-                            return;
-                        }
-                        // If ARM-specific build fails, continue to fallback
-                        log('ARM-specific build failed, trying fallback...', true);
-                    });
-                } catch (armError) {
-                    log('Error with ARM-specific build: ' + armError, true);
-                }
-            }
-
-            // Standard initialization or fallback for ARM
-            dbConnection = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
-                if (err) {
-                    const sqlError = err as SQLiteError;
-                    log(`Error initializing database connection: ${err}`, true);
-                    log('Database error details: ' + JSON.stringify({
-                        code: sqlError.code,
-                        errno: sqlError.errno,
-                        message: sqlError.message,
-                        path: dbPath
-                    }), true);
-
-                    if (process.platform === 'darwin' && process.arch === 'arm64') {
-                        log('Attempting to rebuild sqlite3 for ARM64...', true);
-                        try {
-                            const { execSync } = require('child_process');
-                            // More robust rebuild command
-                            execSync('npm rebuild sqlite3 --build-from-source --target_arch=arm64 --verbose', {
-                                stdio: 'inherit',
-                                env: {
-                                    ...process.env,
-                                    CFLAGS: '-arch arm64',
-                                    CXXFLAGS: '-arch arm64',
-                                    LDFLAGS: '-arch arm64'
-                                }
-                            });
-
-                            // Force reload of sqlite3 after rebuild
-                            delete require.cache[require.resolve('sqlite3')];
-                            const sqlite3 = require('sqlite3');
-
-                            dbConnection = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (rebuildErr: SQLiteError) => {
-                                if (rebuildErr) {
-                                    log('Failed to open database after rebuild: ' + rebuildErr, true);
-                                    log('Please ensure Xcode Command Line Tools are installed (xcode-select --install)', true);
-                                    dbConnection = null;
-                                    resolve();
-                                } else {
-                                    log('Successfully opened database after rebuild');
-                                    resolve();
-                                }
-                            });
-                        } catch (rebuildError) {
-                            log('Failed to rebuild sqlite3: ' + rebuildError, true);
-                            log('Please ensure Xcode Command Line Tools are installed (xcode-select --install)', true);
-                            dbConnection = null;
-                            resolve();
-                        }
-                    } else {
-                        dbConnection = null;
-                        resolve();
-                    }
-                } else {
-                    log('Database connection initialized successfully');
-                    resolve();
-                }
-            });
+            db.close();
         } catch (error) {
-            log(`Critical error during database initialization: ${error}`, true);
-            dbConnection = null;
-            resolve();
-        }
-    });
-}
-
-export async function closeDatabase(): Promise<void> {
-    return new Promise((resolve) => {
-        if (dbConnection) {
-            dbConnection.close(() => {
-                dbConnection = null;
-                log('Database connection closed');
-                resolve();
-            });
-        } else {
-            resolve();
+            log(`Error accessing database: ${error}`, true);
+            resolve(undefined);
         }
     });
 }
 
 export async function readComposerEntries(): Promise<Array<[string, string]>> {
-    if (!dbConnection) {
-        await initializeDatabase();
-    }
+    const dbPath = getCursorDBPath();
 
-    if (!dbConnection) {
-        log('Failed to initialize database connection', true);
+    try {
+        const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+        const stmt = db.prepare("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'");
+        const rows = stmt.all() as Array<{ key: string; value: string }>;
+        db.close();
+
+        return rows.map(row => [row.key, row.value]);
+    } catch (error) {
+        log(`Error querying database: ${error}`, true);
         return [];
     }
-
-    return new Promise((resolve) => {
-        dbConnection!.all(
-            "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'",
-            [],
-            (err, rows: Array<{ key: string; value: string }>) => {
-                if (err) {
-                    log(`Error querying database: ${err}`, true);
-                    resolve([]);
-                    return;
-                }
-
-                const results = rows.map(row => [row.key, row.value] as [string, string]);
-                resolve(results);
-            }
-        );
-    });
 }
 
 export function extractTimingInfo(value: string): TimingInfo | null {
