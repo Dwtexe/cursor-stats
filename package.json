@@ -2,7 +2,7 @@
   "name": "cursor-stats",
   "displayName": "Cursor Stats",
   "description": "A Cursor extension for monitoring usage.",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "publisher": "Dwtexe",
   "icon": "images/icon.png",
   "repository": {

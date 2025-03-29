@@ -69,6 +69,65 @@ export function formatRelativeTime(dateString: string): string {
     return `${hours}:${minutes}:${seconds}`;
 }
 
+/**
+ * Generates a progress bar based on the current usage and limit.
+ * @param current - The current usage amount.
+ * @param max - The maximum allowed usage.
+ * @param overrideMax - An optional override for the maximum value.
+ * @param size - The size of the progress bar.
+ */
+export function generateProgressBar(current: number, max: number, overrideMax: number | null = null, size: number = 10): string {
+    // Calculate the percentage filled, handling cases where current > max
+    const isOverLimit = current > max;
+    const effectiveMax = overrideMax !== null && isOverLimit ? overrideMax : max;
+    const percentage = Math.min(100, (current / effectiveMax) * 100);
+    
+    // Calculate filled boxes
+    const filledBoxes = Math.round((percentage / 100) * size);
+    
+    // For over-limit cases, we need to show the limit marker
+    let progressBar = '';
+    
+    if (isOverLimit) {
+        // Calculate where the limit marker should be
+        const limitMarkerPosition = Math.round((max / effectiveMax) * size);
+        
+        // Build the bar with different colors
+        for (let i = 0; i < size; i++) {
+            if (i < limitMarkerPosition) {
+                progressBar += i < filledBoxes ? '🟩' : '⬜';
+            } else {
+                progressBar += i < filledBoxes ? '🟥' : '⬜';
+            }
+        }
+    } else {
+        // Normal case - just show filled and empty boxes
+        progressBar = '🟩'.repeat(filledBoxes) + '⬜'.repeat(size - filledBoxes);
+    }
+    
+    return progressBar;
+}
+
+/**
+ * Generates a progress bar for a specific period.
+ * @param startDate - The start date of the period.
+ * @param endDate - The end date of the period.
+ * @param size - The size of the progress bar.
+ */
+export function generatePeriodProgressBar(startDate: Date, endDate: Date, size: number = 10): string {
+    const now = new Date();
+    const totalPeriodMs = endDate.getTime() - startDate.getTime();
+    const elapsedMs = now.getTime() - startDate.getTime();
+    
+    // Make sure we don't go below 0 or above 100%
+    const percentage = Math.max(0, Math.min(100, (elapsedMs / totalPeriodMs) * 100));
+    
+    // Calculate filled boxes
+    const filledBoxes = Math.round((percentage / 100) * size);
+    
+    return '🟦'.repeat(filledBoxes) + '⬜'.repeat(size - filledBoxes);
+}
+
 export async function createMarkdownTooltip(lines: string[], isError: boolean = false): Promise<vscode.MarkdownString> {
     const tooltip = new vscode.MarkdownString();
     tooltip.isTrusted = true;
@@ -95,11 +154,55 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
             const percentLine = lines.find(line => line.includes('utilized'));
             const startOfMonthLine = lines.find(line => line.includes('Fast Requests Period:'));
             
-            if (requestLine) {
-                if (startOfMonthLine) {
-                    tooltip.appendMarkdown(`**Period:** ${startOfMonthLine.split(':')[1].trim()}\n\n`);
+            if (requestLine && startOfMonthLine) {
+                // Extract period dates for visualization
+                const periodText = startOfMonthLine.split(':')[1].trim();
+                const [startDateStr, endDateStr] = periodText.split(' - ');
+                
+                // Parse dates
+                const startParts = startDateStr.trim().split(' ');
+                const endParts = endDateStr.trim().split(' ');
+                
+                if (startParts.length === 2 && endParts.length === 2) {
+                    const startDay = parseInt(startParts[0]);
+                    const startMonth = startParts[1];
+                    const endDay = parseInt(endParts[0]);
+                    const endMonth = endParts[1];
+                    
+                    const now = new Date();
+                    const currentYear = now.getFullYear();
+                    
+                    // Create Date objects, handling month crossover to next year
+                    const startDate = new Date(`${startMonth} ${startDay}, ${currentYear}`);
+                    let endDate = new Date(`${endMonth} ${endDay}, ${currentYear}`);
+                    
+                    // If end date is before start date, it's crossing to next year
+                    if (endDate < startDate) {
+                        endDate = new Date(`${endMonth} ${endDay}, ${currentYear + 1}`);
+                    }
+                    
+                    // Generate period progress bar
+                    const periodProgressBar = generatePeriodProgressBar(startDate, endDate);
+                    tooltip.appendMarkdown(`**Period:** ${periodText}\n\n${periodProgressBar}\n\n`);
+                } else {
+                    // Fallback if date parsing fails
+                    tooltip.appendMarkdown(`**Period:** ${periodText}\n\n`);
                 }
-                tooltip.appendMarkdown(`**Usage:** ${requestLine.split('•')[1].trim()}\n\n`);
+                
+                // Extract usage information for visualization
+                const usageParts = requestLine.split('•')[1].trim().split('/');
+                if (usageParts.length === 2) {
+                    const current = parseInt(usageParts[0].trim());
+                    const limit = parseInt(usageParts[1].split(' ')[0].trim());
+                    
+                    // Generate usage progress bar
+                    const usageProgressBar = generateProgressBar(current, limit, current > limit ? current : null);
+                    tooltip.appendMarkdown(`**Usage:** ${usageParts[0].trim()}/${usageParts[1].trim()}\n\n${usageProgressBar}\n\n`);
+                } else {
+                    // Fallback if parsing fails
+                    tooltip.appendMarkdown(`**Usage:** ${requestLine.split('•')[1].trim()}\n\n`);
+                }
+                
                 if (percentLine) {
                     tooltip.appendMarkdown(`**Progress:** ${percentLine.split('📊')[1].trim()}\n\n`);
                 }
@@ -234,16 +337,16 @@ export function getStatusBarColor(percentage: number): vscode.ThemeColor {
 }
 
 export function getUsageEmoji(percentage: number): string {
-    if (percentage >= 90) {
-        return '🔴';
-    }
-    if (percentage >= 75) {
-        return '🟡';
-    }
-    if (percentage >= 50) {
-        return '🟢';
-    }
-    return '✅';
+  if (percentage >= 90) {
+      return '🔴';
+  }
+  if (percentage >= 75) {
+      return '🟡';
+  }
+  if (percentage >= 50) {
+      return '🟢';
+  }
+  return '✅';
 }
 
 export function getMonthName(month: number): string {
