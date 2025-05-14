@@ -17,6 +17,7 @@ import {
 import { createMarkdownTooltip, formatTooltipLine, getMaxLineWidth, getStatusBarColor, createSeparator } from '../handlers/statusBar';
 import * as vscode from 'vscode';
 import { convertAndFormatCurrency, getCurrentCurrency } from './currency';
+import { i18n } from '../services/i18n';
 
 // Track unknown models to avoid repeated notifications
 let unknownModelNotificationShown = false;
@@ -30,10 +31,10 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
        
         if (!token) {
             log('[Critical] No valid token found', true);
-            statusBarItem.text = "$(alert) Cursor Stats: No token found";
+            statusBarItem.text = i18n.t('statusBar.noToken');
             statusBarItem.color = new vscode.ThemeColor('statusBarItem.errorBackground');
             const tooltipLines = [
-                '⚠️ Could not retrieve Cursor token from database'
+                i18n.t('tooltips.errorFetching')
             ];
             statusBarItem.tooltip = await createMarkdownTooltip(tooltipLines, true);
             log('[Status Bar] Updated status bar with no token message');
@@ -177,7 +178,11 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
             }
             
             contentLines.push(
-                formatTooltipLine(`   Usage Based Period: ${formatDateWithMonthName(periodStart)} - ${formatDateWithMonthName(periodEnd)}`),
+                formatTooltipLine(i18n.t('tooltips.period', {
+                    type: i18n.t('tooltips.usageBasedPricing'),
+                    start: formatDateWithMonthName(periodStart),
+                    end: formatDateWithMonthName(periodEnd)
+                }))
             );
             
             // Calculate unpaid amount correctly
@@ -187,29 +192,21 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
             const usagePercentage = usageStatus.limit ? ((actualTotalCost / usageStatus.limit) * 100).toFixed(1) : '0.0';
             
             // Convert currency for tooltip
-            const currencyCode = getCurrentCurrency();
             const formattedActualTotalCost = await convertAndFormatCurrency(actualTotalCost);
             const formattedUnpaidAmount = await convertAndFormatCurrency(unpaidAmount);
-            const formattedLimit = await convertAndFormatCurrency(usageStatus.limit || 0);
-            
-            // Store original values for statusBar.ts to use, using actual total cost
-            const originalUsageData = {
-                usdTotalCost: actualTotalCost, // Use actual cost here
-                usdLimit: usageStatus.limit || 0,
-                percentage: usagePercentage
-            };
             
             if (stats.lastMonth.usageBasedPricing.midMonthPayment > 0) {
                 contentLines.push(
-                    formatTooltipLine(`   Current Usage (Total: ${formattedActualTotalCost} - Unpaid: ${formattedUnpaidAmount})`),
-                    formatTooltipLine(`   __USD_USAGE_DATA__:${JSON.stringify(originalUsageData)}`), // Hidden metadata line
-                    ''
+                    formatTooltipLine(i18n.t('tooltips.currentUsage', {
+                        total: formattedActualTotalCost,
+                        unpaid: formattedUnpaidAmount
+                    }))
                 );
             } else {
                 contentLines.push(
-                    formatTooltipLine(`   Current Usage (Total: ${formattedActualTotalCost})`),
-                    formatTooltipLine(`   __USD_USAGE_DATA__:${JSON.stringify(originalUsageData)}`), // Hidden metadata line 
-                    ''
+                    formatTooltipLine(i18n.t('tooltips.total', {
+                        amount: formattedActualTotalCost
+                    }))
                 );
             }
             
@@ -222,7 +219,7 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
                 // If the item has a description, use it to provide better context
                 if (item.description) {
                     // Extract the item type from description for better display
-                    let displayType = "";
+                    let displayType = '';
                     let isKnownModel = true;
                     
                     if (item.description.includes("tool calls")) {
@@ -230,13 +227,13 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
                     } else if (item.description.match(/o3-mini/i)) {
                         displayType = "o3-mini";
                     } else if (item.description.match(/o1\s+requests/i)) {
-                        displayType = "o1";
+                        displayType = i18n.t('tooltips.requests');
                     } else if (item.description.match(/claude-3\.7-sonnet-thinking-max/i)) {
                         displayType = "claude-3.7-sonnet-thinking-max";
                     } else if (item.description.match(/claude-3\.7-sonnet-max/i)) {
                         displayType = "claude-3.7-sonnet-max";
                     } else if (item.description.match(/extra fast premium/i)) {
-                        displayType = "Fast Requests";
+                        displayType = i18n.t('tooltips.fastRequests');
                     } else if (item.description.match(/gpt-4\.5-preview/i)) {
                         displayType = "gpt-4.5-preview";
                     } else if (item.description.match(/gemini-2-5-pro-exp-max/i)) {
@@ -450,17 +447,18 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
             const now = Date.now();
             const elapsed = now - cooldownStartTime;
             const remaining = COOLDOWN_DURATION_MS - elapsed;
-            statusBarItem.text = `$(warning) Cursor API Unavailable (Retrying in ${formatCountdown(remaining)})`;
+            statusBarItem.text = i18n.t('statusBar.apiUnavailable') + ' (' + 
+                i18n.t('statusBar.retryingIn', { time: formatCountdown(remaining) }) + ')';
         } else {
-            statusBarItem.text = "$(error) Cursor Stats: Error";
+            statusBarItem.text = i18n.t('statusBar.error');
         }
 
         const errorLines = [
-            '⚠️ Error fetching Cursor stats',
-            `❌ ${error.response?.status >= 500 ? 'Cursor API is temporarily unavailable' : 'Unable to retrieve usage statistics'}`,
-            cooldownStartTime ? '\nAuto-refresh paused due to consecutive errors' : '',
+            i18n.t('tooltips.errorFetching'),
+            i18n.t('tooltips.apiUnavailable'),
+            cooldownStartTime ? '\n' + i18n.t('tooltips.autoRefreshPaused') : '',
             '',
-            `🕒 Last attempt: ${new Date().toLocaleString()}`
+            i18n.t('tooltips.lastAttempt', { time: new Date().toLocaleString() })
         ].filter(line => line !== '');
         
         statusBarItem.tooltip = await createMarkdownTooltip(errorLines, true);

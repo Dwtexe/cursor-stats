@@ -4,6 +4,7 @@ import { getCurrentUsageLimit } from '../services/api';
 import { getCursorTokenFromDB } from '../services/database';
 import { convertAndFormatCurrency } from '../utils/currency';
 import { shouldShowProgressBars, createPeriodProgressBar, createUsageProgressBar } from '../utils/progressBars';
+import { i18n } from '../services/i18n';
 
 
 let statusBarItem: vscode.StatusBarItem;
@@ -71,7 +72,7 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
 
     // Header section with centered title
     tooltip.appendMarkdown('<div align="center">\n\n');
-    tooltip.appendMarkdown('## ⚡ Cursor Usage\n\n');
+    tooltip.appendMarkdown(`## ${i18n.t('tooltips.title')}\n\n`);
     tooltip.appendMarkdown('</div>\n\n');
 
     if (isError) {
@@ -81,7 +82,7 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
         // Premium Requests Section
         if (lines.some(line => line.includes('Premium Fast Requests'))) {
             tooltip.appendMarkdown('<div align="center">\n\n');
-            tooltip.appendMarkdown('### 🚀 Premium Fast Requests\n\n');
+            tooltip.appendMarkdown(`### ${i18n.t('tooltips.premiumRequests')}\n\n`);
             tooltip.appendMarkdown('</div>\n\n');
             
             // Extract and format premium request info
@@ -99,7 +100,7 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
                     const total = parseInt(usageMatch[2]);
                     const percent = parseInt(percentMatch[1]);
                     
-                    let displayText = `${used}/${total} (${percent}%) used`;
+                    let displayText = i18n.t('tooltips.requestsUsed', { current: used, limit: total });
                     
                     if (startOfMonthLine) {
                         const periodInfo = startOfMonthLine.split(':')[1].trim();
@@ -184,7 +185,7 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
                 const usageBasedPeriodLine = lines.find(line => line.includes('Usage Based Period:'));
 
                 tooltip.appendMarkdown('<div align="center">\n\n');
-                tooltip.appendMarkdown(`### 📈 Usage-Based Pricing (${isEnabled ? 'Enabled' : 'Disabled'})\n\n`);
+                tooltip.appendMarkdown(`### ${i18n.t('tooltips.usageBasedPricing')} (${isEnabled ? i18n.t('tooltips.enabled') : i18n.t('tooltips.disabled')})\n\n`);
                 tooltip.appendMarkdown('</div>\n\n');
                 
                 if (isEnabled && limitResponse.hardLimit) {
@@ -272,17 +273,17 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
                                                       await convertAndFormatCurrency(unpaidAmount);
                         
                         // Use the already formatted informational line, just add the unpaid part dynamically
-                        tooltip.appendMarkdown(`> ${informationalMidMonthLine.trim()}. (Unpaid: ${formattedUnpaidAmount})\n\n`);
+                        tooltip.appendMarkdown(`> ${i18n.t('tooltips.midMonthPayment', { amount: formattedMidMonthPayment })}. (${i18n.t('tooltips.unpaid', { amount: formattedUnpaidAmount })})\n\n`);
                     }
                 } else {
-                    tooltip.appendMarkdown('> ℹ️ No usage recorded for this period\n\n');
+                    tooltip.appendMarkdown(`> ${i18n.t('tooltips.noUsageData')}\n\n`);
                 }
             } catch (error: any) {
                 log('[API] Error fetching limit for tooltip: ' + error.message, true);
-                tooltip.appendMarkdown('> ⚠️ Error checking usage-based pricing status\n\n');
+                tooltip.appendMarkdown(`> ${i18n.t('tooltips.errorFetching')}\n\n`);
             }
         } else {
-            tooltip.appendMarkdown('> ⚠️ Unable to check usage-based pricing status\n\n');
+            tooltip.appendMarkdown(`> ${i18n.t('tooltips.apiUnavailable')}\n\n`);
         }
     }
 
@@ -291,16 +292,16 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
     tooltip.appendMarkdown('<div align="center">\n\n');
     
     // First row: Account and Extension settings
-    tooltip.appendMarkdown('🌐 [Account Settings](https://www.cursor.com/settings) • ');
-    tooltip.appendMarkdown('🌍 [Currency](command:cursor-stats.selectCurrency) • ');
-    tooltip.appendMarkdown('⚙️ [Extension Settings](command:workbench.action.openSettings?%22@ext%3ADwtexe.cursor-stats%22)\n\n');
+    tooltip.appendMarkdown(`🌐 [${i18n.t('tooltips.accountSettings')}](https://www.cursor.com/settings) • `);
+    tooltip.appendMarkdown(`🌍 [${i18n.t('tooltips.currency')}](command:cursor-stats.selectCurrency) • `);
+    tooltip.appendMarkdown(`⚙️ [${i18n.t('tooltips.extensionSettings')}](command:workbench.action.openSettings?%22@ext%3ADwtexe.cursor-stats%22)\n\n`);
     
     // Second row: Usage Based Pricing, Refresh, and Last Updated
     const updatedLine = lines.find(line => line.includes('Last Updated:'));
     const updatedTime = updatedLine ? formatRelativeTime(updatedLine.split(':').slice(1).join(':').trim()) : new Date().toLocaleTimeString();
     
-    tooltip.appendMarkdown('💰 [Usage Based Pricing](command:cursor-stats.setLimit) • ');
-    tooltip.appendMarkdown('🔄 [Refresh](command:cursor-stats.refreshStats) • ');
+    tooltip.appendMarkdown(`💰 [${i18n.t('tooltips.usageBasedPricingSettings')}](command:cursor-stats.setLimit) • `);
+    tooltip.appendMarkdown(`🔄 [${i18n.t('tooltips.refresh')}](command:cursor-stats.refreshStats) • `);
     tooltip.appendMarkdown(`🕒 ${updatedTime}\n\n`);
     
     tooltip.appendMarkdown('</div>');

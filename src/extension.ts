@@ -5,9 +5,9 @@ import { initializeLogging, log } from './utils/logger';
 import { getCursorTokenFromDB } from './services/database';
 import { checkUsageBasedStatus, getCurrentUsageLimit, setUsageLimit } from './services/api';
 import { resetNotifications } from './handlers/notifications';
-import { 
-    startRefreshInterval, 
-    setStatusBarItem, 
+import {
+    startRefreshInterval,
+    setStatusBarItem,
     setIsWindowFocused,
     clearAllIntervals,
     getCooldownStartTime,
@@ -16,7 +16,8 @@ import {
 import { updateStats } from './utils/updateStats';
 import { SUPPORTED_CURRENCIES } from './utils/currency';
 import { convertAndFormatCurrency } from './utils/currency';
-import { createReportCommand} from './utils/report';
+import { createReportCommand } from './utils/report';
+import { i18n } from './services/i18n';
 
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
@@ -43,18 +44,18 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
         // Initialize logging first
         initializeLogging(context);
-        
+
         log('[Initialization] Extension activation started');
         extensionContext = context;
 
         // Get package.json for current version
         const packageJson = require('../package.json');
         const currentVersion = packageJson.version;
-        
+
         // Check if we need to show changelog after update
         const lastInstalledVersion = context.globalState.get('lastInstalledVersion');
         log(`[Initialization] Current version: ${currentVersion}, Last installed: ${lastInstalledVersion || 'not set'}`);
-        
+
         if (lastInstalledVersion && lastInstalledVersion !== currentVersion) {
             // Show changelog for the current version (we've updated)
             log(`[Update] Extension updated from ${lastInstalledVersion} to ${currentVersion}, showing changelog`);
@@ -62,7 +63,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 checkForUpdates(0, 0, currentVersion);
             }, 3000); // Slight delay to let extension finish activating
         }
-        
+
         // Update the stored version
         context.globalState.update('lastInstalledVersion', currentVersion);
 
@@ -78,7 +79,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const focused = e.focused;
             setIsWindowFocused(focused);
             log(`[Window] Window focus changed: ${focused ? 'focused' : 'unfocused'}`);
-            
+
             if (focused) {
                 // Check if we're in cooldown
                 if (getCooldownStartTime()) {
@@ -101,7 +102,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const status = await checkUsageBasedStatus(token);
             log(`[Initialization] Usage-based pricing is ${status.isEnabled ? 'enabled' : 'disabled'}${status.limit ? ` with limit $${status.limit}` : ''}`);
         }
-        
+
         // Register commands
         log('[Initialization] Registering commands...');
         const refreshCommand = vscode.commands.registerCommand('cursor-stats.refreshStats', async () => {
@@ -150,7 +151,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 await updateStats(statusBarItem);
             }
         });
-        
+
 
         const setLimitCommand = vscode.commands.registerCommand('cursor-stats.setLimit', async () => {
             const token = await getCursorTokenFromDB();
@@ -162,25 +163,28 @@ export async function activate(context: vscode.ExtensionContext) {
             try {
                 const currentLimit = await getCurrentUsageLimit(token);
                 const isEnabled = !currentLimit.noUsageBasedAllowed;
-               
+
                 const quickPick = await vscode.window.showQuickPick([
                     {
-                        label: '$(check) Enable Usage-Based Pricing',
-                        description: 'Turn on usage-based pricing and set a limit',
+                        label: i18n.t('extension.commands.setLimit.enable.label'),
+                        description: i18n.t('extension.commands.setLimit.enable.description'),
                         value: 'enable'
                     },
                     {
-                        label: '$(pencil) Set Monthly Limit',
-                        description: 'Change your monthly spending limit',
+                        label: i18n.t('extension.commands.setLimit.set.label'),
+                        description: i18n.t('extension.commands.setLimit.set.description'),
                         value: 'set'
                     },
                     {
-                        label: '$(x) Disable Usage-Based Pricing',
-                        description: 'Turn off usage-based pricing',
+                        label: i18n.t('extension.commands.setLimit.disable.label'),
+                        description: i18n.t('extension.commands.setLimit.disable.description'),
                         value: 'disable'
                     }
                 ], {
-                    placeHolder: `Current status: ${isEnabled ? 'Enabled' : 'Disabled'} ${isEnabled ? `(Limit: $${currentLimit.hardLimit})` : ''}`
+                    placeHolder: i18n.t('extension.commands.setLimit.placeholder', {
+                        status: isEnabled ? 'Enabled' : 'Disabled',
+                        limit: isEnabled ? `(Limit: $${currentLimit.hardLimit})` : ''
+                    })
                 });
 
                 if (!quickPick) {
@@ -191,7 +195,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     case 'enable':
                         if (!isEnabled) {
                             const limit = await vscode.window.showInputBox({
-                                prompt: 'Enter monthly spending limit in dollars',
+                                prompt: i18n.t('extension.commands.setLimit.enable.prompt'),
                                 placeHolder: '50',
                                 validateInput: (value) => {
                                     const num = Number(value);
@@ -201,18 +205,18 @@ export async function activate(context: vscode.ExtensionContext) {
                             if (limit) {
                                 await setUsageLimit(token, Number(limit), false);
                                 const formattedLimit = await convertAndFormatCurrency(Number(limit));
-                                vscode.window.showInformationMessage(`Usage-based pricing enabled with ${formattedLimit} limit`);
+                                vscode.window.showInformationMessage(i18n.t('extension.commands.setLimit.enable.success', { limit: formattedLimit }));
                                 await updateStats(statusBarItem);
                             }
                         } else {
-                            vscode.window.showInformationMessage('Usage-based pricing is already enabled');
+                            vscode.window.showInformationMessage(i18n.t('extension.commands.setLimit.alreadyEnabled'));
                         }
                         break;
 
                     case 'set':
                         if (isEnabled) {
                             const newLimit = await vscode.window.showInputBox({
-                                prompt: 'Enter new monthly spending limit in dollars',
+                                prompt: i18n.t('extension.commands.setLimit.set.prompt'),
                                 placeHolder: String(currentLimit.hardLimit),
                                 validateInput: (value) => {
                                     const num = Number(value);
@@ -222,33 +226,33 @@ export async function activate(context: vscode.ExtensionContext) {
                             if (newLimit) {
                                 await setUsageLimit(token, Number(newLimit), false);
                                 const formattedLimit = await convertAndFormatCurrency(Number(newLimit));
-                                vscode.window.showInformationMessage(`Monthly limit updated to ${formattedLimit}`);
+                                vscode.window.showInformationMessage(i18n.t('extension.commands.setLimit.set.success', { limit: formattedLimit }));
                                 await updateStats(statusBarItem);
                             }
                         } else {
-                            vscode.window.showWarningMessage('Please enable usage-based pricing first');
+                            vscode.window.showWarningMessage(i18n.t('extension.commands.setLimit.enableFirst'));
                         }
                         break;
 
                     case 'disable':
                         if (isEnabled) {
                             await setUsageLimit(token, 0, true);
-                            vscode.window.showInformationMessage('Usage-based pricing disabled');
+                            vscode.window.showInformationMessage(i18n.t('extension.commands.setLimit.disable.success'));
                             await updateStats(statusBarItem);
                         } else {
-                            vscode.window.showInformationMessage('Usage-based pricing is already disabled');
+                            vscode.window.showInformationMessage(i18n.t('extension.commands.setLimit.alreadyDisabled'));
                         }
                         break;
                 }
             } catch (error: any) {
-                vscode.window.showErrorMessage(`Failed to manage usage limit: ${error.message}`);
+                vscode.window.showErrorMessage(i18n.t('extension.commands.setLimit.error', { error: error.message }));
             }
         });
-        
+
         // Add command to status bar item
         statusBarItem.command = 'cursor-stats.openSettings';
         log('[Status Bar] Command assigned to status bar item');
-        
+
         // Register package.json configuration contribution
         context.subscriptions.push(
             vscode.commands.registerCommand('cursor-stats.selectCurrency', async () => {
@@ -257,11 +261,11 @@ export async function activate(context: vscode.ExtensionContext) {
                     description: currency.code === 'USD' ? 'Default' : '',
                     code: currency.code
                 }));
-                
+
                 const selected = await vscode.window.showQuickPick(currencyPicks, {
                     placeHolder: 'Select currency for display',
                 });
-                
+
                 if (selected) {
                     const config = vscode.workspace.getConfiguration('cursorStats');
                     await config.update('currency', selected.code, vscode.ConfigurationTarget.Global);
@@ -270,20 +274,20 @@ export async function activate(context: vscode.ExtensionContext) {
                 }
             })
         );
-        
-        
+
+
         // Add to subscriptions
         context.subscriptions.push(
-            statusBarItem, 
-            openCursorSettings, 
-            refreshCommand, 
+            statusBarItem,
+            openCursorSettings,
+            refreshCommand,
             setLimitCommand,
             createReportCommand,
             configListener,
             focusListener  // Add focus listener to subscriptions
         );
         log('[Initialization] Subscriptions registered');
-        
+
         // Show status bar item explicitly
         log('[Status Bar] Showing status bar item...');
         statusBarItem.show();
@@ -301,20 +305,20 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Register configuration for the progress bars
         const config = vscode.workspace.getConfiguration('cursorStats');
-        
+
         // Default settings for progress bars (disabled by default)
         if (config.get('showProgressBars') === undefined) {
             config.update('showProgressBars', false, vscode.ConfigurationTarget.Global);
         }
-        
+
         if (config.get('progressBarLength') === undefined) {
             config.update('progressBarLength', 10, vscode.ConfigurationTarget.Global);
         }
-        
+
         if (config.get('progressBarWarningThreshold') === undefined) {
             config.update('progressBarWarningThreshold', 75, vscode.ConfigurationTarget.Global);
         }
-        
+
         if (config.get('progressBarCriticalThreshold') === undefined) {
             config.update('progressBarCriticalThreshold', 90, vscode.ConfigurationTarget.Global);
         }
@@ -335,12 +339,12 @@ export function deactivate() {
     try {
         clearAllIntervals();
         log('[Deactivation] All intervals cleared');
-        
+
         if (outputChannel) {
             outputChannel.dispose();
             log('[Deactivation] Output channel disposed');
         }
-        
+
         log('[Deactivation] Extension deactivation completed successfully');
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
