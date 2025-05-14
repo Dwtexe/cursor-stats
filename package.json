@@ -60,232 +60,242 @@
         "icon": "$(notebook)"
       }
     ],
-    "configuration": [
-      {
-        "title": "Cursor Stats",
-        "properties": {
-          "cursorStats.enableLogging": {
-            "type": "boolean",
-            "default": false,
-            "description": "Enable detailed logging for debugging purposes.",
-            "scope": "window"
-          },
-          "cursorStats.enableStatusBarColors": {
-            "type": "boolean",
-            "default": true,
-            "description": "Enable colored status bar based on usage percentage.",
-            "scope": "window"
-          },
-          "cursorStats.statusBarColorThresholds": {
-            "type": "array",
-            "description": "Customize status bar text color based on usage percentage. Define thresholds (min percentage) and colors (theme ID or hex). Defaults replicate original behavior.",
-            "scope": "window",
-            "default": [
-              { "percentage": 95, "color": "#CC0000" },
-              { "percentage": 90, "color": "#FF3333" },
-              { "percentage": 85, "color": "#FF4D4D" },
-              { "percentage": 80, "color": "#FF6600" },
-              { "percentage": 75, "color": "#FF8800" },
-              { "percentage": 70, "color": "#FFAA00" },
-              { "percentage": 65, "color": "#FFCC00" },
-              { "percentage": 60, "color": "#FFE066" },
-              { "percentage": 50, "color": "#DCE775" },
-              { "percentage": 40, "color": "#66BB6A" },
-              { "percentage": 30, "color": "#81C784" },
-              { "percentage": 20, "color": "#B3E6B3" },
-              { "percentage": 10, "color": "#E8F5E9" },
-              { "percentage": 0, "color": "#FFFFFF" } 
-            ],
-            "items": {
-              "type": "object",
-              "required": ["percentage", "color"],
-              "properties": {
-                "percentage": {
-                  "type": "number",
-                  "description": "Minimum percentage threshold (0-100).",
-                  "minimum": 0,
-                  "maximum": 100
-                },
-                "color": {
-                  "type": "string",
-                  "description": "Color to use. Can be a theme color ID (e.g., 'charts.red', 'statusBarItem.foreground') or a hex color code (e.g., '#FF0000')."
-                }
+    "configuration": {
+      "title": "Cursor Stats",
+      "properties": {
+        "cursorStats.enableLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable detailed logging for debugging purposes.",
+          "scope": "window"
+        },
+        "cursorStats.enableStatusBarColors": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable colored status bar based on usage percentage.",
+          "scope": "window"
+        },
+        "cursorStats.statusBarColorThresholds": {
+          "type": "array",
+          "description": "Customize status bar text color based on usage percentage. Define thresholds (min percentage) and colors (theme ID or hex). Defaults replicate original behavior.",
+          "scope": "window",
+          "default": [
+            { "percentage": 95, "color": "#CC0000" },
+            { "percentage": 90, "color": "#FF3333" },
+            { "percentage": 85, "color": "#FF4D4D" },
+            { "percentage": 80, "color": "#FF6600" },
+            { "percentage": 75, "color": "#FF8800" },
+            { "percentage": 70, "color": "#FFAA00" },
+            { "percentage": 65, "color": "#FFCC00" },
+            { "percentage": 60, "color": "#FFE066" },
+            { "percentage": 50, "color": "#DCE775" },
+            { "percentage": 40, "color": "#66BB6A" },
+            { "percentage": 30, "color": "#81C784" },
+            { "percentage": 20, "color": "#B3E6B3" },
+            { "percentage": 10, "color": "#E8F5E9" },
+            { "percentage": 0, "color": "#FFFFFF" } 
+          ],
+          "items": {
+            "type": "object",
+            "required": ["percentage", "color"],
+            "properties": {
+              "percentage": {
+                "type": "number",
+                "description": "Minimum percentage threshold (0-100).",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "color": {
+                "type": "string",
+                "description": "Color to use. Can be a theme color ID (e.g., 'charts.red', 'statusBarItem.foreground') or a hex color code (e.g., '#FF0000')."
               }
             }
-          },
-          "cursorStats.enableAlerts": {
-            "type": "boolean",
-            "default": true,
-            "description": "Enable usage alert notifications.",
-            "scope": "window"
-          },
-          "cursorStats.usageAlertThresholds": {
-            "type": "array",
-            "default": [10, 30, 50, 75, 90, 100],
-            "description": "Percentage thresholds at which to show usage alerts.",
-            "items": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 100
-            },
-            "scope": "window"
-          },
-          "cursorStats.refreshInterval": {
-            "type": "number",
-            "default": 60,
-            "minimum": 10,
-            "description": "How often to refresh the stats (in seconds). Minimum 10 seconds.",
-            "scope": "window"
-          },
-          "cursorStats.showTotalRequests": {
-            "type": "boolean",
-            "default": false,
-            "description": "Show total requests (fast requests + usage-based requests) in the status bar.",
-            "scope": "window"
-          },
-          "cursorStats.spendingAlertThreshold": {
-            "type": "number",
-            "default": 1,
-            "minimum": 0,
-            "description": "Dollar amount threshold for spending notifications (0 to disable, any positive amount in dollars).",
-            "scope": "window"
-          },
-          "cursorStats.currency": {
-            "type": "string",
-            "default": "USD",
-            "enum": [
-              "USD",
-              "EUR",
-              "GBP",
-              "JPY",
-              "AUD",
-              "CAD",
-              "CHF",
-              "CNY",
-              "INR",
-              "MXN",
-              "BRL",
-              "RUB",
-              "KRW",
-              "SGD",
-              "NZD",
-              "TRY",
-              "ZAR",
-              "SEK",
-              "NOK",
-              "DKK",
-              "HKD",
-              "TWD",
-              "PHP",
-              "THB",
-              "IDR",
-              "VND",
-              "ILS",
-              "AED",
-              "SAR",
-              "MYR",
-              "PLN",
-              "CZK",
-              "HUF",
-              "RON",
-              "BGN",
-              "HRK",
-              "EGP",
-              "QAR",
-              "KWD",
-              "MAD"
-            ],
-            "enumDescriptions": [
-              "US Dollar",
-              "Euro",
-              "British Pound",
-              "Japanese Yen",
-              "Australian Dollar",
-              "Canadian Dollar",
-              "Swiss Franc",
-              "Chinese Yuan",
-              "Indian Rupee",
-              "Mexican Peso",
-              "Brazilian Real",
-              "Russian Ruble",
-              "South Korean Won",
-              "Singapore Dollar",
-              "New Zealand Dollar",
-              "Turkish Lira",
-              "South African Rand",
-              "Swedish Krona",
-              "Norwegian Krone",
-              "Danish Krone",
-              "Hong Kong Dollar",
-              "Taiwan Dollar",
-              "Philippine Peso",
-              "Thai Baht",
-              "Indonesian Rupiah",
-              "Vietnamese Dong",
-              "Israeli Shekel",
-              "UAE Dirham",
-              "Saudi Riyal",
-              "Malaysian Ringgit",
-              "Polish Złoty",
-              "Czech Koruna",
-              "Hungarian Forint",
-              "Romanian Leu",
-              "Bulgarian Lev",
-              "Croatian Kuna",
-              "Egyptian Pound",
-              "Qatari Riyal",
-              "Kuwaiti Dinar",
-              "Moroccan Dirham"
-            ],
-            "description": "Currency to display monetary values in (default: USD)"
-          },
-          "cursorStats.showProgressBars": {
-            "type": "boolean",
-            "default": false,
-            "description": "Show emoji-based progress bars in the tooltip for premium requests and usage-based pricing.",
-            "scope": "window"
-          },
-          "cursorStats.progressBarLength": {
-            "type": "number",
-            "default": 10,
-            "minimum": 5,
-            "maximum": 20,
-            "description": "Length of the progress bars (number of characters).",
-            "scope": "window"
-          },
-          "cursorStats.progressBarWarningThreshold": {
-            "type": "number",
-            "default": 50,
-            "minimum": 0,
-            "maximum": 100,
-            "description": "Percentage threshold at which progress bars turn yellow (warning).",
-            "scope": "window"
-          },
-          "cursorStats.progressBarCriticalThreshold": {
-            "type": "number",
-            "default": 75,
-            "minimum": 0,
-            "maximum": 100,
-            "description": "Percentage threshold at which progress bars turn red (critical).",
-            "scope": "window"
-          },
-          "cursorStats.customDatabasePath": {
-            "type": "string",
-            "default": "",
-            "description": "Custom path to the Cursor database file. Leave empty to use default location.",
-            "scope": "window"
           }
+        },
+        "cursorStats.enableAlerts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable usage alert notifications.",
+          "scope": "window"
+        },
+        "cursorStats.usageAlertThresholds": {
+          "type": "array",
+          "default": [10, 30, 50, 75, 90, 100],
+          "description": "Percentage thresholds at which to show usage alerts.",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "scope": "window"
+        },
+        "cursorStats.refreshInterval": {
+          "type": "number",
+          "default": 60,
+          "minimum": 10,
+          "description": "How often to refresh the stats (in seconds). Minimum 10 seconds.",
+          "scope": "window"
+        },
+        "cursorStats.showTotalRequests": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show total requests (fast requests + usage-based requests) in the status bar.",
+          "scope": "window"
+        },
+        "cursorStats.spendingAlertThreshold": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0,
+          "description": "Dollar amount threshold for spending notifications (0 to disable, any positive amount in dollars).",
+          "scope": "window"
+        },
+        "cursorStats.currency": {
+          "type": "string",
+          "default": "USD",
+          "enum": [
+            "USD",
+            "EUR",
+            "GBP",
+            "JPY",
+            "AUD",
+            "CAD",
+            "CHF",
+            "CNY",
+            "INR",
+            "MXN",
+            "BRL",
+            "RUB",
+            "KRW",
+            "SGD",
+            "NZD",
+            "TRY",
+            "ZAR",
+            "SEK",
+            "NOK",
+            "DKK",
+            "HKD",
+            "TWD",
+            "PHP",
+            "THB",
+            "IDR",
+            "VND",
+            "ILS",
+            "AED",
+            "SAR",
+            "MYR",
+            "PLN",
+            "CZK",
+            "HUF",
+            "RON",
+            "BGN",
+            "HRK",
+            "EGP",
+            "QAR",
+            "KWD",
+            "MAD"
+          ],
+          "enumDescriptions": [
+            "US Dollar",
+            "Euro",
+            "British Pound",
+            "Japanese Yen",
+            "Australian Dollar",
+            "Canadian Dollar",
+            "Swiss Franc",
+            "Chinese Yuan",
+            "Indian Rupee",
+            "Mexican Peso",
+            "Brazilian Real",
+            "Russian Ruble",
+            "South Korean Won",
+            "Singapore Dollar",
+            "New Zealand Dollar",
+            "Turkish Lira",
+            "South African Rand",
+            "Swedish Krona",
+            "Norwegian Krone",
+            "Danish Krone",
+            "Hong Kong Dollar",
+            "Taiwan Dollar",
+            "Philippine Peso",
+            "Thai Baht",
+            "Indonesian Rupiah",
+            "Vietnamese Dong",
+            "Israeli Shekel",
+            "UAE Dirham",
+            "Saudi Riyal",
+            "Malaysian Ringgit",
+            "Polish Złoty",
+            "Czech Koruna",
+            "Hungarian Forint",
+            "Romanian Leu",
+            "Bulgarian Lev",
+            "Croatian Kuna",
+            "Egyptian Pound",
+            "Qatari Riyal",
+            "Kuwaiti Dinar",
+            "Moroccan Dirham"
+          ],
+          "description": "Currency to display monetary values in (default: USD)"
+        },
+        "cursorStats.showProgressBars": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show emoji-based progress bars in the tooltip for premium requests and usage-based pricing.",
+          "scope": "window"
+        },
+        "cursorStats.progressBarLength": {
+          "type": "number",
+          "default": 10,
+          "minimum": 5,
+          "maximum": 20,
+          "description": "Length of the progress bars (number of characters).",
+          "scope": "window"
+        },
+        "cursorStats.progressBarWarningThreshold": {
+          "type": "number",
+          "default": 50,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage threshold at which progress bars turn yellow (warning).",
+          "scope": "window"
+        },
+        "cursorStats.progressBarCriticalThreshold": {
+          "type": "number",
+          "default": 75,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage threshold at which progress bars turn red (critical).",
+          "scope": "window"
+        },
+        "cursorStats.customDatabasePath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the Cursor database file. Leave empty to use default location.",
+          "scope": "window"
+        },
+        "cursorStats.locale": {
+          "type": "string",
+          "default": "en",
+          "enum": ["en", "sv"],
+          "enumDescriptions": [
+            "English",
+            "Swedish"
+          ],
+          "description": "Language for the extension UI",
+          "scope": "window"
         }
       }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ && npm run copy-locales",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "copy-locales": "cp -r src/locales out/"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.8",

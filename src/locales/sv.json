@@ -1,0 +1,126 @@
+{
+    "code": "sv",
+    "name": "Svenska",
+    "translation": {
+        "statusBar": {
+            "noToken": "$(alert) Cursor Stats: Ingen token hittades",
+            "error": "$(error) Cursor Stats: Fel",
+            "apiUnavailable": "$(warning) Cursor API är otillgängligt",
+            "retryingIn": "Försöker igen om {time}"
+        },
+        "tooltips": {
+            "title": "⚡ Cursor Användningsstatistik ⚡",
+            "premiumRequests": "🚀 Snabba Premium Förfrågningar",
+            "requestsUsed": "{current}/{limit} förfrågningar använda",
+            "utilized": "{percent}% utnyttjat",
+            "period": "{type} Period: {start} - {end}",
+            "usageBasedPricing": "📈 Användningsbaserad Prissättning",
+            "currentUsage": "Nuvarande Användning (Totalt: {total} - Obetalt: {unpaid})",
+            "total": "Totalt: {amount}",
+            "unpaid": "Obetalt: {amount}",
+            "noUsageData": "ℹ️ Ingen användningsdata för förra månaden",
+            "lastUpdated": "🕒 Senast Uppdaterad: {time}",
+            "errorFetching": "⚠️ Fel vid hämtning av Cursor statistik",
+            "apiUnavailable": "❌ Cursor API är tillfälligt otillgängligt",
+            "autoRefreshPaused": "Automatisk uppdatering pausad på grund av upprepade fel",
+            "lastAttempt": "🕒 Senaste försök: {time}",
+            "midMonthPayment": "ℹ️ Du har betalat {amount} av denna kostnad redan",
+            "totalCost": "💳 Total Kostnad: {amount}",
+            "fastRequests": "Snabba Förfrågningar",
+            "requests": "Förfrågningar",
+            "used": "använt",
+            "enabled": "Aktiverad",
+            "disabled": "Inaktiverad",
+            "accountSettings": "Kontoinställningar",
+            "currency": "Valuta",
+            "extensionSettings": "Tilläggsinställningar",
+            "usageBasedPricingSettings": "Användningsbaserad Prissättning",
+            "refresh": "Uppdatera",
+            "lastUpdatedTime": "Senast uppdaterad"
+        },
+        "notifications": {
+            "unknownModel": {
+                "message": "Ny Cursor modell upptäckt i api-svaret: \"{models}\". Vänligen skapa en rapport och skicka in den på GitHub så vi kan lägga till stöd för denna modell.",
+                "createReport": "Skapa Rapport",
+                "openIssues": "Öppna GitHub Ärenden"
+            },
+            "unpaidInvoice": {
+                "message": "⚠️ Du har en obetald mitten-av-månaden faktura. Vänligen betala den för att fortsätta använda användningsbaserad prissättning.",
+                "openBilling": "Öppna Faktureringssida"
+            },
+            "spendingThreshold": {
+                "message": "Din Cursor användning har nått {amount}",
+                "detail": "Nästa notifiering kommer vid {nextAmount}. Klicka på Hantera Gräns för att justera dina användningsinställningar.",
+                "manageLimit": "Hantera Gräns",
+                "dismiss": "Avfärda"
+            },
+            "usageThreshold": {
+                "premium": {
+                    "message": "Premium förfrågningar har nått {percent}%",
+                    "messageExceeded": "Premium förfrågningar har överskridit gränsen ({percent}%)",
+                    "detailExceeded": "Aktivera användningsbaserad prissättning för att fortsätta använda premium modeller.",
+                    "detail": "Klicka på Visa Inställningar för att hantera dina användningsgränser.",
+                    "viewSettings": "Visa Inställningar",
+                    "enableUsageBased": "Aktivera Användningsbaserad"
+                },
+                "usageBased": {
+                    "message": "Användningsbaserad kostnad har nått {percent}% av din ${limit} gräns",
+                    "detail": "Klicka på Hantera Gräns för att justera dina inställningar för användningsbaserad prissättning.",
+                    "manageLimit": "Hantera Gräns"
+                }
+            },
+            "settingsError": {
+                "message": "Kunde inte öppna Cursor Stats inställningar. Vänligen försök öppna VS Code inställningar manuellt.",
+                "fallback": "Kunde inte öppna inställningar med reservmetod"
+            }
+        },
+        "currency": {
+            "format": "{amount} {symbol}"
+        },
+        "report": {
+            "generating": {
+                "title": "Skapar Cursor Stats Rapport",
+                "progress": "Samlar data..."
+            },
+            "success": {
+                "message": "Rapport skapad!\n{fileName}",
+                "openFile": "Öppna Fil",
+                "openFolder": "Öppna Mapp",
+                "openIssues": "Öppna GitHub Ärenden"
+            },
+            "error": {
+                "message": "Kunde inte skapa rapport. Kontrollera loggar för detaljer.",
+                "details": "Fel vid skapande av rapport: {error}"
+            }
+        },
+        "extension": {
+            "commands": {
+                "setLimit": {
+                    "title": "Inställningar för Användningsbaserad Prissättning",
+                    "placeholder": "Nuvarande status: {status} {limit}",
+                    "enable": {
+                        "label": "$(check) Aktivera Användningsbaserad Prissättning",
+                        "description": "Slå på användningsbaserad prissättning och sätt en gräns",
+                        "prompt": "Ange månatlig kostnadsgräns i dollar",
+                        "success": "Användningsbaserad prissättning aktiverad med {limit} gräns"
+                    },
+                    "set": {
+                        "label": "$(pencil) Sätt Månatlig Gräns",
+                        "description": "Ändra din månatliga kostnadsgräns",
+                        "prompt": "Ange ny månatlig kostnadsgräns i dollar",
+                        "success": "Månatlig gräns uppdaterad till {limit}"
+                    },
+                    "disable": {
+                        "label": "$(x) Inaktivera Användningsbaserad Prissättning",
+                        "description": "Stäng av användningsbaserad prissättning",
+                        "success": "Användningsbaserad prissättning inaktiverad"
+                    },
+                    "error": "Kunde inte hantera användningsgräns: {error}",
+                    "alreadyEnabled": "Användningsbaserad prissättning är redan aktiverad",
+                    "alreadyDisabled": "Användningsbaserad prissättning är redan inaktiverad",
+                    "enableFirst": "Vänligen aktivera användningsbaserad prissättning först"
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,126 @@
+{
+    "code": "en",
+    "name": "English",
+    "translation": {
+        "statusBar": {
+            "noToken": "$(alert) Cursor Stats: No token found",
+            "error": "$(error) Cursor Stats: Error",
+            "apiUnavailable": "$(warning) Cursor API Unavailable",
+            "retryingIn": "Retrying in {time}"
+        },
+        "tooltips": {
+            "title": "⚡ Cursor Usage Statistics ⚡",
+            "premiumRequests": "🚀 Premium Fast Requests",
+            "requestsUsed": "{current}/{limit} requests used",
+            "utilized": "{percent}% utilized",
+            "period": "{type} Period: {start} - {end}",
+            "usageBasedPricing": "📈 Usage-Based Pricing",
+            "currentUsage": "Current Usage (Total: {total} - Unpaid: {unpaid})",
+            "total": "Total: {amount}",
+            "unpaid": "Unpaid: {amount}",
+            "noUsageData": "ℹ️ No usage data for last month",
+            "lastUpdated": "🕒 Last Updated: {time}",
+            "errorFetching": "⚠️ Error fetching Cursor stats",
+            "apiUnavailable": "❌ Cursor API is temporarily unavailable",
+            "autoRefreshPaused": "Auto-refresh paused due to consecutive errors",
+            "lastAttempt": "🕒 Last attempt: {time}",
+            "midMonthPayment": "ℹ️ You have paid {amount} of this cost already",
+            "totalCost": "💳 Total Cost: {amount}",
+            "fastRequests": "Fast Requests",
+            "requests": "Requests",
+            "used": "used",
+            "enabled": "Enabled",
+            "disabled": "Disabled",
+            "accountSettings": "Account Settings",
+            "currency": "Currency",
+            "extensionSettings": "Extension Settings",
+            "usageBasedPricingSettings": "Usage Based Pricing",
+            "refresh": "Refresh",
+            "lastUpdatedTime": "Last Updated"
+        },
+        "notifications": {
+            "unknownModel": {
+                "message": "New Cursor model detected on api response: \"{models}\". Please create a report and submit it on GitHub so we can add support for this model.",
+                "createReport": "Create Report",
+                "openIssues": "Open GitHub Issues"
+            },
+            "unpaidInvoice": {
+                "message": "⚠️ You have an unpaid mid-month invoice. Please pay it to continue using usage-based pricing.",
+                "openBilling": "Open Billing Page"
+            },
+            "spendingThreshold": {
+                "message": "Your Cursor usage spending has reached {amount}",
+                "detail": "Next notification will be at {nextAmount}. Click Manage Limit to adjust your usage settings.",
+                "manageLimit": "Manage Limit",
+                "dismiss": "Dismiss"
+            },
+            "usageThreshold": {
+                "premium": {
+                    "message": "Premium request usage has reached {percent}%",
+                    "messageExceeded": "Premium request usage has exceeded limit ({percent}%)",
+                    "detailExceeded": "Enable usage-based pricing to continue using premium models.",
+                    "detail": "Click View Settings to manage your usage limits.",
+                    "viewSettings": "View Settings",
+                    "enableUsageBased": "Enable Usage-Based"
+                },
+                "usageBased": {
+                    "message": "Usage-based spending has reached {percent}% of your ${limit} limit",
+                    "detail": "Click Manage Limit to adjust your usage-based pricing settings.",
+                    "manageLimit": "Manage Limit"
+                }
+            },
+            "settingsError": {
+                "message": "Failed to open Cursor Stats settings. Please try opening VS Code settings manually.",
+                "fallback": "Failed to open settings with fallback method"
+            }
+        },
+        "currency": {
+            "format": "{symbol}{amount}"
+        },
+        "report": {
+            "generating": {
+                "title": "Creating Cursor Stats Report",
+                "progress": "Gathering data..."
+            },
+            "success": {
+                "message": "Report created successfully!\n{fileName}",
+                "openFile": "Open File",
+                "openFolder": "Open Folder",
+                "openIssues": "Open GitHub Issues"
+            },
+            "error": {
+                "message": "Failed to create report. Check logs for details.",
+                "details": "Error creating report: {error}"
+            }
+        },
+        "extension": {
+            "commands": {
+                "setLimit": {
+                    "title": "Usage Based Pricing Settings",
+                    "placeholder": "Current status: {status} {limit}",
+                    "enable": {
+                        "label": "$(check) Enable Usage-Based Pricing",
+                        "description": "Turn on usage-based pricing and set a limit",
+                        "prompt": "Enter monthly spending limit in dollars",
+                        "success": "Usage-based pricing enabled with {limit} limit"
+                    },
+                    "set": {
+                        "label": "$(pencil) Set Monthly Limit",
+                        "description": "Change your monthly spending limit",
+                        "prompt": "Enter new monthly spending limit in dollars",
+                        "success": "Monthly limit updated to {limit}"
+                    },
+                    "disable": {
+                        "label": "$(x) Disable Usage-Based Pricing",
+                        "description": "Turn off usage-based pricing",
+                        "success": "Usage-based pricing disabled"
+                    },
+                    "error": "Failed to manage usage limit: {error}",
+                    "alreadyEnabled": "Usage-based pricing is already enabled",
+                    "alreadyDisabled": "Usage-based pricing is already disabled",
+                    "enableFirst": "Please enable usage-based pricing first"
+                }
+            }
+        }
+    }
+}
