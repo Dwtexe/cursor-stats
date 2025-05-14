@@ -6,7 +6,7 @@ import { getExtensionContext } from '../extension';
 
 export async function getCurrentUsageLimit(token: string): Promise<UsageLimitResponse> {
     try {
-        const response = await axios.post('https://www.cursor.com/api/dashboard/get-hard-limit', 
+        const response = await axios.post('https://www.cursor.com/api/dashboard/get-hard-limit',
             {}, // empty JSON body
             {
                 headers: {
@@ -23,7 +23,7 @@ export async function getCurrentUsageLimit(token: string): Promise<UsageLimitRes
 
 export async function setUsageLimit(token: string, hardLimit: number, noUsageBasedAllowed: boolean): Promise<void> {
     try {
-        await axios.post('https://www.cursor.com/api/dashboard/set-hard-limit', 
+        await axios.post('https://www.cursor.com/api/dashboard/set-hard-limit',
             {
                 hardLimit,
                 noUsageBasedAllowed
@@ -41,7 +41,7 @@ export async function setUsageLimit(token: string, hardLimit: number, noUsageBas
     }
 }
 
-export async function checkUsageBasedStatus(token: string): Promise<{isEnabled: boolean, limit?: number}> {
+export async function checkUsageBasedStatus(token: string): Promise<{ isEnabled: boolean, limit?: number }> {
     try {
         const response = await getCurrentUsageLimit(token);
         return {
@@ -62,13 +62,13 @@ async function fetchMonthData(token: string, month: number, year: number): Promi
         const response = await axios.post('https://www.cursor.com/api/dashboard/get-monthly-invoice', {
             month,
             year,
-            includeUsageEvents: false
+            includeUsageEvents: true
         }, {
             headers: {
                 Cookie: `WorkosCursorSessionToken=${token}`
             }
         });
-        
+
         const usageItems: UsageItem[] = [];
         let midMonthPayment = 0;
         if (response.data.items) {
@@ -80,31 +80,30 @@ async function fetchMonthData(token: string, month: number, year: number): Promi
                     log('[API] Skipping item without cents value: ' + item.description);
                     continue;
                 }
-                
+
                 // Skip mid-month payment items
                 if (item.description.includes('Mid-month usage paid')) {
                     continue;
                 }
-                
-                // Extract the request count - match the first number in the description
-                const match = item.description.match(/^(\d+)/);
-                if (match && match[1]) {
-                    const requestCount = parseInt(match[1]);
+
+                // Try to extract request count from description
+                const requestMatch = item.description.match(/^(\d+)/);
+                if (requestMatch && requestMatch[1]) {
+                    const requestCount = parseInt(requestMatch[1]);
                     maxRequestCount = Math.max(maxRequestCount, requestCount);
                 }
             }
-            
+
             // Calculate the padding width based on the maximum request count
             const paddingWidth = maxRequestCount.toString().length;
 
             for (const item of response.data.items) {
-                
                 // Skip items without cents value
                 if (!item.hasOwnProperty('cents')) {
                     log('[API] Skipping item without cents value: ' + item.description);
                     continue;
                 }
-                
+
                 // Check if this is a mid-month payment
                 if (item.description.includes('Mid-month usage paid')) {
                     // Skip if cents is undefined
@@ -123,52 +122,68 @@ async function fetchMonthData(token: string, month: number, year: number): Promi
                     continue; // Skip adding this to regular usage items
                 }
 
-                // Extract the request count - match the first number in the description
-                const match = item.description.match(/^(\d+)/);
-                if (!match || !match[1]) {
-                    log('[API] Could not extract request count from: ' + item.description);
-                    continue;
-                }
-                
-                const requestCount = parseInt(match[1]);
-                const cents = item.cents;
-                
-                // Skip items with 0 requests to avoid division by zero
-                if (requestCount === 0) {
-                    log('[API] Skipping item with 0 requests: ' + item.description);
-                    continue;
-                }
-                
-                // Skip if cents is undefined
-                if (typeof item.cents === 'undefined') {
-                    log('[API] Skipping item with undefined cents value: ' + item.description);
-                    continue;
-                }
-                
-                const costPerRequest = item.cents / requestCount;
                 const dollars = item.cents / 100;
 
-                // Pad request count based on the maximum width
-                const paddedRequestCount = requestCount.toString().padStart(paddingWidth, '0');
-                // Format cost per request in dollars
-                const costPerRequestDollars = (costPerRequest / 100).toFixed(2);
+                const requestMatch = item.description.match(/^(\d+)/);
 
-                // Get a user-friendly description based on the item type
-                let itemType = "requests";
-                if (item.description.includes("tool calls")) {
-                    itemType = "tool calls";
-                } else if (item.description.match(/claude|gpt|gemini|o1|o3-mini/i)) {
-                    itemType = "AI requests";
+                if (item.description.includes('extra fast premium requests')) {
+                    const requestCount = parseInt(requestMatch?.[1] || '0');
+                    // Ensure requestCount is not zero to avoid division by zero
+                    const costPerRequest = requestCount > 0 ? item.cents / requestCount : 0;
+                    const paddedRequestCount = requestCount.toString().padStart(paddingWidth, '0');
+                    const costPerRequestDollars = (costPerRequest / 100).toFixed(2);
+
+                    usageItems.push({
+                        calculation: `${paddedRequestCount}*$${costPerRequestDollars} (Fast Requests)`,
+                        totalDollars: `$${dollars.toFixed(2)}`,
+                        description: item.description
+                    });
+                    continue;
+                } else {
+                    // Handle other types of requests (model-based, potentially MAX mode)
+                    const modelMatch = item.description.match(/call(?:s)? to ([^,]+)/);
+                    const modelNameFromDesc = modelMatch?.[1]; // Actual model name or undefined
+
+                    const count = parseInt(requestMatch?.[1] || '1');
+                    const paddedCount = count.toString().padStart(paddingWidth, '0');
+                    const costPerRequestStr = (count > 0 ? (dollars / count) : dollars).toFixed(2);
+
+                    let isMaxMode = false;
+                    let displayStringPart = '';
+
+                    if (modelNameFromDesc) {
+                        displayStringPart = ` ${modelNameFromDesc}`;
+                        // Check for MAX mode only if we have a model name from description
+                        if (response.data.usageEvents) {
+                            const eventsForThisModelAndCost = response.data.usageEvents.filter((e: any) => {
+                                const composer = e.details?.toolCallComposer || e.details?.composer;
+                                return composer?.modelIntent === modelNameFromDesc &&
+                                    Math.abs(e.priceCents - (item.cents / count)) < 0.01; // Match price per request
+                            });
+                            if (eventsForThisModelAndCost.length > 0) {
+                                isMaxMode = eventsForThisModelAndCost.some((e: any) => {
+                                    const composer = e.details?.toolCallComposer || e.details?.composer;
+                                    return composer?.maxMode;
+                                });
+                            }
+                        }
+                        if (isMaxMode) {
+                            displayStringPart += ' (MAX)';
+                        }
+                    } else {
+                        // No model name found in description, default to (Requests)
+                        displayStringPart = ' (Requests)';
+                    }
+
+                    usageItems.push({
+                        calculation: `${paddedCount}*$${costPerRequestStr}${displayStringPart}`,
+                        totalDollars: `$${dollars.toFixed(2)}`,
+                        description: item.description
+                    });
                 }
-
-                usageItems.push({
-                    calculation: `${paddedRequestCount}*$${costPerRequestDollars}`,
-                    totalDollars: `$${dollars.toFixed(2)}`,
-                    description: item.description // Add the original description for reference
-                });
             }
         }
-        
+
         return {
             items: usageItems,
             hasUnpaidMidMonthInvoice: false,
@@ -201,7 +216,7 @@ export async function fetchCursorStats(token: string): Promise<CursorStats> {
             log('[API] Fetching team usage data...');
             const teamUsage = await getTeamUsage(token, teamInfo.teamId);
             const userUsage = extractUserUsage(teamUsage, teamInfo.userId);
-            
+
             premiumRequests = {
                 current: userUsage.numRequests,
                 limit: userUsage.maxRequestUsage,
@@ -228,7 +243,7 @@ export async function fetchCursorStats(token: string): Promise<CursorStats> {
         const usageBasedBillingDay = 3; // Assuming it's the 3rd day of the month
         let usageBasedCurrentMonth = currentDate.getMonth() + 1;
         let usageBasedCurrentYear = currentDate.getFullYear();
-        
+
         // If we're in the first few days of the month (before billing date),
         // consider the previous month as the current billing period
         if (currentDate.getDate() < usageBasedBillingDay) {
