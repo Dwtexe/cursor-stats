@@ -10,6 +10,7 @@ All notable changes to the "cursor-stats" extension will be documented in this f
   - 中文 (Chinese) 
   - 한국어 (Korean)
 - 🔧 **Language Selection**: New command "Cursor Stats: Select Language" for easy language switching
+- ⚙️ **Changelog Popup Control**: New setting `cursorStats.showChangelogOnUpdate` to disable automatic changelog popup and update notifications on extension updates (disabled by default for less distraction)
 
 ### Changed
 - 🌐 All UI elements, notifications, and messages are now translatable
