@@ -90,6 +90,7 @@
 | `cursorStats.excludeWeekends` | Exclude weekends from period progress and daily calculations | `false` |
 | `cursorStats.showDailyRemaining` | Show estimated fast requests remaining per day | `false` |
 | `cursorStats.language` | Language for extension interface and messages | `en` |
+| `cursorStats.showChangelogOnUpdate` | Show changelog popup and update notifications when extension updates | `false` |
 
 </details>
 

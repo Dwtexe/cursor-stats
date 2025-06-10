@@ -66,11 +66,18 @@ export async function activate(context: vscode.ExtensionContext) {
         log(`[Initialization] Current version: ${currentVersion}, Last installed: ${lastInstalledVersion || 'not set'}`);
         
         if (lastInstalledVersion && lastInstalledVersion !== currentVersion) {
-            // Show changelog for the current version (we've updated)
-            log(`[Update] Extension updated from ${lastInstalledVersion} to ${currentVersion}, showing changelog`);
-            setTimeout(() => {
-                checkForUpdates(0, 0, currentVersion);
-            }, 3000); // Slight delay to let extension finish activating
+            // Check if changelog should be shown on update
+            const showChangelogOnUpdate = vscode.workspace.getConfiguration('cursorStats').get('showChangelogOnUpdate', false);
+            
+            if (showChangelogOnUpdate) {
+                // Show changelog for the current version (we've updated)
+                log(`[Update] Extension updated from ${lastInstalledVersion} to ${currentVersion}, showing changelog`);
+                setTimeout(() => {
+                    checkForUpdates(0, 0, currentVersion);
+                }, 3000); // Slight delay to let extension finish activating
+            } else {
+                log(`[Update] Extension updated from ${lastInstalledVersion} to ${currentVersion}, changelog disabled by user setting`);
+            }
         }
         
         // Update the stored version

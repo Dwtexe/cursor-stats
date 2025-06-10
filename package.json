@@ -353,6 +353,12 @@
               "한국어 (Korean)"
             ],
             "description": "Language for the extension interface and messages."
+          },
+          "cursorStats.showChangelogOnUpdate": {
+            "type": "boolean",
+            "default": false,
+            "description": "Show changelog popup and update notifications when the extension is updated to a new version.",
+            "scope": "window"
           }
         }
       }
