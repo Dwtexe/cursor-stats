@@ -43,13 +43,13 @@
     "totalCost": "Total Cost",
     "noUsageDataAvailable": "No usage data available",
     "usage": "Usage",
-    "weekday": "weekday", 
+    "weekday": "weekday",
     "weekdays": "weekdays",
     "month": "Month",
     "apiUnavailable": "Cursor API Unavailable (Retrying in {countdown})",
     "months": {
       "january": "January",
-      "february": "February", 
+      "february": "February",
       "march": "March",
       "april": "April",
       "may": "May",
@@ -224,4 +224,4 @@
     "kwd": "Kuwaiti Dinar",
     "mad": "Moroccan Dirham"
   }
-} 
+}

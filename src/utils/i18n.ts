@@ -16,21 +16,21 @@ let onLanguageChangeCallback: ((newLanguage: string, languageLabel: string) => v
  */
 export function initializeI18n(): void {
   loadLanguagePacks();
-  
+
   // Set initial language pack
   if (!currentLanguagePack) {
     const config = vscode.workspace.getConfiguration('cursorStats');
     const language = config.get<string>('language', 'en');
     currentLanguagePack = languagePacks[language] || languagePacks['en'];
     currentLanguage = language;
-    
+
     if (!currentLanguagePack) {
       log('[I18n] Critical: No language pack available! Extension may not work properly.', true);
     }
   }
-  
+
   updateCurrentLanguage();
-  
+
   // Listen for language setting changes
   vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
     if (e.affectsConfiguration('cursorStats.language')) {
@@ -59,7 +59,7 @@ function loadLanguagePackFromFile(languageCode: string): LanguagePack | null {
       // Alternative production path
       path.join(extensionPath, 'locales', `${languageCode}.json`),
       // Development path
-      path.join(extensionPath, 'out', 'locales', `${languageCode}.json`)
+      path.join(extensionPath, 'out', 'locales', `${languageCode}.json`),
     ];
 
     let localesPath: string | null = null;
@@ -69,7 +69,7 @@ function loadLanguagePackFromFile(languageCode: string): LanguagePack | null {
         break;
       }
     }
-    
+
     if (!localesPath) {
       log(`[I18n] Language file not found in any of these paths:`, possiblePaths, true);
       return null;
@@ -77,11 +77,14 @@ function loadLanguagePackFromFile(languageCode: string): LanguagePack | null {
 
     const fileContent = fs.readFileSync(localesPath, 'utf8');
     const languagePack = JSON.parse(fileContent) as LanguagePack;
-    
+
     log(`[I18n] Loaded language pack for: ${languageCode} from ${localesPath}`);
     return languagePack;
   } catch (error) {
-    log(`[I18n] Error loading language pack for ${languageCode}: ${error instanceof Error ? error.message : String(error)}`, true);
+    log(
+      `[I18n] Error loading language pack for ${languageCode}: ${error instanceof Error ? error.message : String(error)}`,
+      true,
+    );
     return null;
   }
 }
@@ -90,8 +93,8 @@ function loadLanguagePackFromFile(languageCode: string): LanguagePack | null {
  * Load all language packs
  */
 function loadLanguagePacks(): void {
-  const supportedLanguages = ['en', 'zh', 'ko', 'ja'];
-  
+  const supportedLanguages = ['en', 'zh', 'ko', 'ja', 'de', 'ru', 'kk'];
+
   for (const lang of supportedLanguages) {
     const pack = loadLanguagePackFromFile(lang);
     if (pack) {
@@ -101,7 +104,10 @@ function loadLanguagePacks(): void {
 
   // Ensure English language pack is loaded (required default language)
   if (!languagePacks['en']) {
-    log('[I18n] Critical: English language pack not loaded! Extension may not work properly.', true);
+    log(
+      '[I18n] Critical: English language pack not loaded! Extension may not work properly.',
+      true,
+    );
   }
 
   log('[I18n] Language packs loaded');
@@ -113,24 +119,28 @@ function loadLanguagePacks(): void {
 function updateCurrentLanguage(): void {
   const config = vscode.workspace.getConfiguration('cursorStats');
   const newLanguage = config.get<string>('language', 'en');
-  
+
   if (newLanguage !== currentLanguage) {
     const oldLanguage = currentLanguage;
     currentLanguage = newLanguage;
-    
+
     // Get language pack, fallback to English if not available
     const languagePack = languagePacks[newLanguage] || languagePacks['en'];
     if (languagePack) {
       currentLanguagePack = languagePack;
       log(`[I18n] Language changed to: ${newLanguage}`);
-      
+
       // Trigger language change callback
-      if (onLanguageChangeCallback && oldLanguage !== 'en') { // Avoid triggering during initialization
+      if (onLanguageChangeCallback && oldLanguage !== 'en') {
+        // Avoid triggering during initialization
         const languageLabels: { [key: string]: string } = {
-          'en': 'English',
-          'zh': '中文',
-          'ko': '한국어',
-          'ja': '日本語'
+          en: 'English',
+          zh: '中文',
+          ko: '한국어',
+          ja: '日本語',
+          de: 'Deutsch',
+          ru: 'Русский',
+          kk: 'Қазақша',
         };
         onLanguageChangeCallback(newLanguage, languageLabels[newLanguage] || newLanguage);
       }
@@ -147,31 +157,31 @@ function updateCurrentLanguage(): void {
  */
 export function t(key: string, params?: { [key: string]: string | number }): string {
   let value = getTranslationValue(key, currentLanguagePack);
-  
+
   // If translation not found in current language and current language is not English, try English fallback
   if (value === null && currentLanguage !== 'en' && languagePacks['en']) {
     log(`[I18n] Translation key '${key}' not found in ${currentLanguage}, falling back to English`);
     value = getTranslationValue(key, languagePacks['en']);
   }
-  
+
   // If still no translation found, return the key itself
   if (value === null) {
     log(`[I18n] Translation key not found in any language pack: ${key}`, true);
     return key;
   }
-  
+
   if (typeof value !== 'string') {
     log(`[I18n] Translation value is not a string: ${key}`, true);
     return key;
   }
-  
+
   // Replace parameters
   if (params) {
-    Object.keys(params).forEach(param => {
+    Object.keys(params).forEach((param) => {
       value = value.replace(new RegExp(`{${param}}`, 'g'), params[param].toString());
     });
   }
-  
+
   return value;
 }
 
@@ -185,10 +195,10 @@ function getTranslationValue(key: string, languagePack: LanguagePack): any {
   if (!languagePack) {
     return null;
   }
-  
+
   const keys = key.split('.');
   let value: any = languagePack;
-  
+
   for (const k of keys) {
     if (value && typeof value === 'object' && k in value) {
       value = value[k];
@@ -196,7 +206,7 @@ function getTranslationValue(key: string, languagePack: LanguagePack): any {
       return null; // Key not found
     }
   }
-  
+
   return value;
 }
 
@@ -217,6 +227,8 @@ export function getCurrentLanguagePack(): LanguagePack {
 /**
  * Set language change callback function
  */
-export function setOnLanguageChangeCallback(callback: (newLanguage: string, languageLabel: string) => void): void {
+export function setOnLanguageChangeCallback(
+  callback: (newLanguage: string, languageLabel: string) => void,
+): void {
   onLanguageChangeCallback = callback;
-} 
+}

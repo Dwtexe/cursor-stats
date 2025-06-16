@@ -49,7 +49,7 @@
     "apiUnavailable": "Cursor API 不可用（重试倒计时 {countdown}）",
     "months": {
       "january": "1月",
-      "february": "2月", 
+      "february": "2月",
       "march": "3月",
       "april": "4月",
       "may": "5月",
@@ -224,4 +224,4 @@
     "viewFullRelease": "在 GitHub 上查看完整发布",
     "installedMessage": "Cursor Stats {version} 已安装"
   }
-} 
+}

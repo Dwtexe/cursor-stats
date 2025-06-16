@@ -344,13 +344,21 @@
             "default": "en",
             "enum": [
               "en",
+              "de",
+              "ru",
               "zh",
-              "ko"
+              "ko",
+              "ja",
+              "kk"
             ],
             "enumDescriptions": [
               "English",
+              "Deutsch (German)",
+              "Русский (Russian)",
               "中文 (Chinese)",
-              "한국어 (Korean)"
+              "한국어 (Korean)",
+              "日本語 (Japanese)",
+              "Қазақша (Kazakh)"
             ],
             "description": "Language for the extension interface and messages."
           }
@@ -365,7 +373,8 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "devDependencies": {
     "@types/jsonwebtoken": "9.0.9",
@@ -378,6 +387,7 @@
     "@vscode/test-cli": "^0.0.10",
     "eslint": "9.27.0",
     "typescript": "5.8.3",
+    "prettier": "^3.3.2",
     "@types/sql.js": "1.4.9"
   },
   "dependencies": {
@@ -391,5 +401,12 @@
   },
   "extensionKind": [
     "ui"
-  ]
+  ],
+  "prettier": {
+    "singleQuote": true,
+    "trailingComma": "all",
+    "printWidth": 100,
+    "tabWidth": 2,
+    "semi": true
+  }
 }
