@@ -2,7 +2,7 @@
   "statusBar": {
     "premiumFastRequests": "高级快速请求",
     "usageBasedPricing": "使用量计费",
-    "teamUsage": "团队使用情况",
+    "teamSpend": "团队支出",
     "period": "周期",
     "utilized": "已使用",
     "used": "已用",

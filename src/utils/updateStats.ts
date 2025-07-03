@@ -14,6 +14,8 @@ import { createMarkdownTooltip, formatTooltipLine, getMaxLineWidth, getStatusBar
 import * as vscode from 'vscode';
 import { convertAndFormatCurrency, getCurrentCurrency } from './currency';
 import { t } from './i18n';
+import axios from 'axios';
+import { CursorUsageResponse } from '../interfaces/types';
 
 // Track unknown models to avoid repeated notifications
 let unknownModelNotificationShown = false;
@@ -38,10 +40,6 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
             log('[Status Bar] Status bar visibility updated after no token');
             return;
         }
-
-        // Check usage-based status first
-        const usageStatus = await checkUsageBasedStatus(token);
-        log(`[Stats] Usage-based pricing status: ${JSON.stringify(usageStatus)}`);
 
         // Show status bar early to ensure visibility
         statusBarItem.show();
@@ -68,6 +66,10 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
                 startRefreshInterval();
             }
         }
+
+        // Check usage-based status with team information if available
+        const usageStatus = await checkUsageBasedStatus(token, stats.teamId);
+        log(`[Stats] Usage-based pricing status: ${JSON.stringify(usageStatus)}`);
         
         let costText = '';
         
@@ -75,7 +77,6 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
         const premiumPercent = Math.round((stats.premiumRequests.current / stats.premiumRequests.limit) * 100);
         let usageBasedPercent = 0;
         let totalUsageText = '';
-        let totalRequests = stats.premiumRequests.current;
 
         // Use current month if it has data, otherwise fall back to last month
         const activeMonthData = stats.currentMonth.usageBasedPricing.items.length > 0 
@@ -94,16 +95,7 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
                 return cost > 0 ? sum + cost : sum;
             }, 0);
 
-            // Calculate total requests from usage-based pricing (needed for status bar text)
-            const usageBasedRequests = items.reduce((sum, item) => {
-                // Only count requests from positive cost items
-                if (parseFloat(item.totalDollars.replace('$', '')) > 0) {
-                    const match = item.calculation.match(/^\*\*(\d+)\*\*/);
-                    return sum + (match ? parseInt(match[1]) : 0);
-                }
-                return sum;
-            }, 0);
-            totalRequests += usageBasedRequests;
+            // Usage-based requests are tracked separately and not added to the premium count
             
             // Calculate usage percentage based on actual total cost (always in USD)
             if (usageStatus.isEnabled && usageStatus.limit) {
@@ -114,31 +106,39 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
             const formattedActualCost = await convertAndFormatCurrency(actualTotalCost);
             costText = ` $(credit-card) ${formattedActualCost}`;
 
-            // Calculate total usage text if enabled
-            const config = vscode.workspace.getConfiguration('cursorStats');
-            const showTotalRequests = config.get<boolean>('showTotalRequests', false);
-            
-            if (showTotalRequests) {
-                totalUsageText = ` ${totalRequests}/${stats.premiumRequests.limit}${costText}`;
-            } else {
-                totalUsageText = ` ${stats.premiumRequests.current}/${stats.premiumRequests.limit}${costText}`;
-            }
+            // Status bar should only show premium requests count, not total
+            totalUsageText = ` ${stats.premiumRequests.current}/${stats.premiumRequests.limit}${costText}`;
         } else {
             totalUsageText = ` ${stats.premiumRequests.current}/${stats.premiumRequests.limit}`;
         }
 
         // Set status bar color based on usage type
-        const usagePercent = premiumPercent < 100 ? premiumPercent : 
-                            (usageStatus.isEnabled ? usageBasedPercent : premiumPercent);
+        // Always use only premium percent for color calculation, not combined totals
+        const usagePercent = premiumPercent;
+        
+        log(`[Stats] Color calculation details:`, {
+            premiumRequests: `${stats.premiumRequests.current}/${stats.premiumRequests.limit}`,
+            premiumPercent: premiumPercent,
+            usageBasedPercent: usageBasedPercent,
+            usageBasedEnabled: usageStatus.isEnabled,
+            finalUsagePercent: usagePercent
+        });
+        
         statusBarItem.color = getStatusBarColor(usagePercent);
 
         // Build content first to determine width
         const title = t('statusBar.cursorUsageStats');
         const contentLines = [
             title,
-            '',
-            t('statusBar.premiumFastRequests')
+            ''
         ];
+        
+        // Add Team Spend section if using team spend data
+        if (stats.isTeamSpendData) {
+            contentLines.push(t('statusBar.teamSpend'));
+        }
+        
+        contentLines.push(t('statusBar.premiumFastRequests'));
         
         // Format premium requests progress with fixed decimal places
         const premiumPercentFormatted = Math.round(premiumPercent);
@@ -170,9 +170,97 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
             formatTooltipLine(`   • ${stats.premiumRequests.current}/${stats.premiumRequests.limit} ${t('statusBar.requestsUsed')}`),
             formatTooltipLine(`   📊 ${premiumPercentFormatted}% ${t('statusBar.utilized')}`),
             formatTooltipLine(`   ${t('statusBar.fastRequestsPeriod')}: ${formatDateWithMonthName(startDate)} - ${formatDateWithMonthName(endDate)}`),
-            '',
-            t('statusBar.usageBasedPricing')
+            ''
         );
+
+        // Add detailed model usage breakdown if available
+        try {
+            const userId = token.split('%3A%3A')[0];
+            const usageResponse = await axios.get<CursorUsageResponse>('https://cursor.com/api/usage', {
+                params: { user: userId },
+                headers: { Cookie: `WorkosCursorSessionToken=${token}` }
+            });
+            
+            const usageData = usageResponse.data;
+            
+            // Show team vs individual comparison if using team spend data
+            if (stats.isTeamSpendData) {
+                // Get team spend data for comparison
+                let teamSpendRequests = 'N/A';
+                try {
+                    const { checkTeamMembership, getTeamSpend, extractUserSpend } = await import('../services/team');
+                    const context = await import('../extension').then(m => m.getExtensionContext());
+                    const teamInfo = await checkTeamMembership(token, context);
+                    
+                    if (teamInfo.isTeamMember && teamInfo.teamId && teamInfo.userId) {
+                        const teamSpend = await getTeamSpend(token, teamInfo.teamId);
+                        const userSpend = extractUserSpend(teamSpend, teamInfo.userId);
+                        teamSpendRequests = (userSpend.fastPremiumRequests || 0).toString();
+                    }
+                } catch (error) {
+                    log('[Stats] Error fetching team spend for comparison: ' + error, true);
+                }
+                
+                contentLines.push(
+                    '🔍 **Data Source Information**',
+                    formatTooltipLine(`   • **Current Display**: Using GPT-4 individual data (${usageData['gpt-4'].numRequests} requests)`),
+                    formatTooltipLine(`   • **Team Spend Data**: ${teamSpendRequests} requests (may update slower)`),
+                    ''
+                );
+            }
+            
+            contentLines.push(
+                '📊 **Detailed Usage Breakdown**',
+                ''
+            );
+            
+            // Show data for each model with better labeling
+            Object.entries(usageData).forEach(([modelName, data]) => {
+                if (typeof data === 'object' && data !== null && 'numRequests' in data) {
+                    const modelData = data as any;
+                    const hasLimit = modelData.maxRequestUsage !== null;
+                    const hasTokens = modelData.numTokens > 0;
+                    
+                    let displayName = modelName;
+                    let description = '';
+                    
+                    // Better labeling based on your clarification
+                    if (modelName === 'gpt-4') {
+                        displayName = 'GPT-4 (Premium/Fast)';
+                        description = 'Fast premium requests';
+                    } else if (modelName === 'gpt-4-32k') {
+                        displayName = 'GPT-4-32k (Usage-Based)';
+                        description = 'Usage-based spending limit';
+                    } else if (modelName === 'gpt-3.5-turbo') {
+                        displayName = 'GPT-3.5-turbo';
+                        description = 'Legacy model';
+                    }
+                    
+                    let modelLine = `   • **${displayName}**: ${modelData.numRequests} requests`;
+                    if (hasLimit) {
+                        modelLine += ` / ${modelData.maxRequestUsage} limit`;
+                    }
+                    if (hasTokens) {
+                        modelLine += ` (${modelData.numTokens} tokens)`;
+                    }
+                    
+                    contentLines.push(formatTooltipLine(modelLine));
+                    
+                    // Add description for clarity
+                    if (description) {
+                        contentLines.push(formatTooltipLine(`     ${description}`));
+                    }
+                }
+            });
+            
+            contentLines.push(
+                '',
+                t('statusBar.usageBasedPricing')
+            );
+        } catch (error) {
+            // If we can't get detailed usage data, just continue with the regular flow
+            contentLines.push(t('statusBar.usageBasedPricing'));
+        }
         
         if (activeMonthData.usageBasedPricing.items.length > 0) {
             const items = activeMonthData.usageBasedPricing.items;

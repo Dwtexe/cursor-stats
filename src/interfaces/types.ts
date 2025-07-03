@@ -36,6 +36,8 @@ export interface CursorStats {
         limit: number;
         startOfMonth: string;
     };
+    isTeamSpendData?: boolean;
+    teamId?: number;
 }
 
 export interface ProgressBarSettings {
@@ -85,6 +87,7 @@ export interface TimingInfo {
 
 export interface UsageLimitResponse {
     hardLimit?: number;
+    hardLimitPerUser?: number;
     noUsageBasedAllowed?: boolean;
 }
 
@@ -170,25 +173,7 @@ export interface TeamMember {
     role: string;
 }
 
-export interface TeamUsageResponse {
-    teamMemberUsage: TeamMemberUsage[];
-}
 
-export interface TeamMemberUsage {
-    id: number;
-    usageData: UsageData[];
-}
-
-export interface UsageData {
-    modelType: string;
-    numRequests: number;
-    numTokens: number;
-    maxRequestUsage: number;
-    lastUsage: string;
-    copilotUsage: number;
-    docsCount: number;
-    copilotAcceptedUsage: number;
-}
 
 export interface UserCache {
     userId: number;
@@ -224,13 +209,13 @@ export interface CursorReport {
         teamId?: number;
         userId?: number;
     } | null;
-    teamUsage: TeamUsageResponse | null;
+    teamSpend: TeamSpendResponse | null;
     rawResponses: {
         cursorStats?: any;
         usageLimit?: any;
         premiumUsage?: any;
         teamInfo?: any;
-        teamUsage?: any;
+        teamSpend?: any;
         monthlyInvoice?: {
             current?: any;
             last?: any;
@@ -240,4 +225,20 @@ export interface CursorReport {
     errors: {
         [key: string]: string;
     };
+}
+
+export interface TeamSpendResponse {
+    teamMemberSpend: TeamMemberSpend[];
+    subscriptionCycleStart: string;
+    totalMembers: number;
+    totalPages: number;
+}
+
+export interface TeamMemberSpend {
+    userId: number;
+    name: string;
+    email: string;
+    role: string;
+    hardLimitOverrideDollars: number;
+    fastPremiumRequests?: number;
 } 

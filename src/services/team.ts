@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
 import * as jwt from 'jsonwebtoken';
-import { TeamInfo, TeamMemberInfo, TeamUsageResponse, UserCache, CursorUsageResponse } from '../interfaces/types';
+import { TeamInfo, TeamMemberInfo, TeamSpendResponse, TeamMemberSpend, UserCache, CursorUsageResponse } from '../interfaces/types';
 import { log } from '../utils/logger';
 
 const CACHE_FILE_NAME = 'user-cache.json';
@@ -79,7 +79,7 @@ export async function checkTeamMembership(token: string, context: vscode.Extensi
         log('[Team] Cache miss or invalid, fetching fresh usage data');
         const tokenUserId = token.split('%3A%3A')[0];
         log('[Team] Making request to /api/usage endpoint');
-        const usageResponse = await axios.get<CursorUsageResponse>('https://www.cursor.com/api/usage', {
+        const usageResponse = await axios.get<CursorUsageResponse>('https://cursor.com/api/usage', {
             params: { user: tokenUserId },
             headers: {
                 Cookie: `WorkosCursorSessionToken=${token}`
@@ -94,10 +94,11 @@ export async function checkTeamMembership(token: string, context: vscode.Extensi
 
         // Fetch team membership data
         log('[Team] Making request to /api/dashboard/teams endpoint');
-        const response = await axios.post<TeamInfo>('https://www.cursor.com/api/dashboard/teams', 
+        const response = await axios.post<TeamInfo>('https://cursor.com/api/dashboard/teams', 
             {}, // empty JSON body
             {
                 headers: {
+                    'Content-Type': 'application/json',
                     Cookie: `WorkosCursorSessionToken=${token}`
                 }
             }
@@ -117,10 +118,11 @@ export async function checkTeamMembership(token: string, context: vscode.Extensi
         if (isTeamMember && teamId) {
             // Fetch team details to get userId
             log('[Team] Making request to /api/dashboard/team endpoint');
-            const teamResponse = await axios.post<TeamMemberInfo>('https://www.cursor.com/api/dashboard/team', 
+            const teamResponse = await axios.post<TeamMemberInfo>('https://cursor.com/api/dashboard/team', 
                 { teamId },
                 {
                     headers: {
+                        'Content-Type': 'application/json',
                         Cookie: `WorkosCursorSessionToken=${token}`
                     }
                 }
@@ -161,25 +163,27 @@ export async function checkTeamMembership(token: string, context: vscode.Extensi
     }
 }
 
-export async function getTeamUsage(token: string, teamId: number): Promise<TeamUsageResponse> {
+export async function getTeamSpend(token: string, teamId: number): Promise<TeamSpendResponse> {
     try {
-        log('[Team] Making request to get team usage');
-        const response = await axios.post<TeamUsageResponse>('https://www.cursor.com/api/dashboard/get-team-usage', 
+        log('[Team] Making request to get team spend');
+        const response = await axios.post<TeamSpendResponse>('https://cursor.com/api/dashboard/get-team-spend', 
             { teamId }, // Include teamId in request body
             {
                 headers: {
+                    'Content-Type': 'application/json',
                     Cookie: `WorkosCursorSessionToken=${token}`
                 }
             }
         );
-        log('[Team] Team usage response', {
-            memberCount: response.data.teamMemberUsage.length,
+        log('[Team] Team spend response', {
+            memberCount: response.data.teamMemberSpend.length,
+            totalMembers: response.data.totalMembers,
             status: response.status
         });
         return response.data;
     } catch (error: any) {
-        log('[Team] Error fetching team usage', error.message, true);
-        log('[Team] Team usage error details', {
+        log('[Team] Error fetching team spend', error.message, true);
+        log('[Team] Team spend error details', {
             status: error.response?.status,
             data: error.response?.data,
             headers: error.response?.headers,
@@ -192,36 +196,33 @@ export async function getTeamUsage(token: string, teamId: number): Promise<TeamU
     }
 }
 
-export function extractUserUsage(teamUsage: TeamUsageResponse, userId: number) {
-    log('[Team] Extracting usage data for user', { userId });
+export function extractUserSpend(teamSpend: TeamSpendResponse, userId: number) {
+    log('[Team] Extracting spend data for user', { userId });
     
-    const userUsage = teamUsage.teamMemberUsage.find(member => member.id === userId);
-    if (!userUsage) {
-        log('[Team] User usage data not found in team response', {
-            availableUserIds: teamUsage.teamMemberUsage.map(m => m.id),
+    const userSpend = teamSpend.teamMemberSpend.find(member => member.userId === userId);
+    if (!userSpend) {
+        log('[Team] User spend data not found in team response', {
+            availableUserIds: teamSpend.teamMemberSpend.map(m => m.userId),
             searchedUserId: userId
         }, true);
-        throw new Error('User usage data not found in team usage response');
+        throw new Error('User spend data not found in team spend response');
     }
 
-    const gpt4Usage = userUsage.usageData.find(data => data.modelType === 'gpt-4');
-    if (!gpt4Usage) {
-        log('[Team] GPT-4 usage data not found for user', {
-            userId,
-            availableModels: userUsage.usageData.map(d => d.modelType)
-        }, true);
-        throw new Error('GPT-4 usage data not found for user');
-    }
-
-    log('[Team] Successfully extracted user usage data', {
+    log('[Team] Successfully extracted user spend data', {
         userId,
-        numRequests: gpt4Usage.numRequests,
-        maxRequestUsage: gpt4Usage.maxRequestUsage,
-        lastUsage: gpt4Usage.lastUsage
+        name: userSpend.name,
+        email: userSpend.email,
+        role: userSpend.role,
+        hardLimitOverrideDollars: userSpend.hardLimitOverrideDollars,
+        fastPremiumRequests: userSpend.fastPremiumRequests || 0
     });
 
     return {
-        numRequests: gpt4Usage.numRequests ?? 0,
-        maxRequestUsage: gpt4Usage.maxRequestUsage
+        userId: userSpend.userId,
+        name: userSpend.name,
+        email: userSpend.email,
+        role: userSpend.role,
+        hardLimitOverrideDollars: userSpend.hardLimitOverrideDollars,
+        fastPremiumRequests: userSpend.fastPremiumRequests || 0
     };
 } 

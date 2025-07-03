@@ -2,6 +2,35 @@
 
 All notable changes to the "cursor-stats" extension will be documented in this file.
 
+## [1.1.5] - 2025-07-03
+
+### Added
+- 🔄 **Hybrid Data Collection**: Smart combination of team spend and individual usage APIs for comprehensive statistics
+- 📊 **Enhanced Model Breakdown**: Detailed tooltip showing usage across all AI models with proper labeling
+  - GPT-4 (Premium/Fast): Fast premium requests
+  - GPT-4-32k (Usage-Based): Usage-based spending limit  
+  - GPT-3.5-turbo: Legacy model
+- 🔍 **Team vs Individual Comparison**: Clear distinction between team usage and individual usage for team members
+- 🎯 **Improved API Logic**: Better understanding of usage-based spending limits from GPT-4-32k data
+
+### Changed
+- 🔧 **API Endpoint Migration**: Replaced deprecated `get-team-usage` with `get-team-spend` endpoint
+- 📈 **Data Source Priority**: Team members now get team-specific usage data while maintaining individual context
+- 💡 **Usage-Based Limit Detection**: GPT-4-32k `maxRequestUsage` now properly represents usage-based spending limits
+- 🏷️ **Model Labeling**: Enhanced model names with descriptive labels for better user understanding
+- 🔄 **Fallback Mechanism**: Automatic fallback to individual usage API if team APIs fail
+
+### Fixed
+- 🐛 **Missing Request Limits**: Resolved issue where team spend data lacked `maxRequestUsage` by combining with individual usage API
+- 🎯 **Data Accuracy**: Improved accuracy for team members by using team-specific usage data
+- 📊 **Status Bar Display**: Better alignment between dashboard data and extension display
+- 🔧 **Error Handling**: Enhanced error handling for API endpoint transitions
+- 🚨 **CRITICAL: Usage-Based Pricing Detection**: Fixed inconsistent usage-based pricing status detection for team members
+  - Backend correctly detected team usage-based pricing as enabled
+  - UI tooltip incorrectly showed "disabled" due to missing team context
+  - Fixed by ensuring tooltip uses team-aware API calls with proper teamId parameter
+  - Resolves issue where $250 usage-based pricing showed as "disabled" in tooltip despite being active
+
 ## [1.1.4] - 2025-06-06
 
 ### Added
