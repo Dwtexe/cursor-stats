@@ -2,7 +2,7 @@
   "name": "cursor-stats",
   "displayName": "Cursor Stats",
   "description": "A Cursor extension for monitoring usage.",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "publisher": "Dwtexe",
   "icon": "images/icon.png",
   "repository": {
@@ -372,13 +372,13 @@
     "@types/mocha": "10.0.10",
     "@types/node": "22.15.20",
     "@types/semver": "7.7.0",
+    "@types/sql.js": "1.4.9",
     "@types/vscode": "1.96.0",
     "@typescript-eslint/eslint-plugin": "8.32.1",
     "@typescript-eslint/parser": "8.32.1",
     "@vscode/test-cli": "^0.0.10",
     "eslint": "9.27.0",
-    "typescript": "5.8.3",
-    "@types/sql.js": "1.4.9"
+    "typescript": "5.8.3"
   },
   "dependencies": {
     "axios": "1.9.0",
@@ -387,7 +387,7 @@
     "lru-cache": "^11.1.0",
     "marked": "15.0.12",
     "semver": "7.7.2",
-    "sql.js": "1.13.0"
+    "sql.js": "^1.13.0"
   },
   "extensionKind": [
     "ui"
