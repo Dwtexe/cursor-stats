@@ -7,7 +7,7 @@ import { CursorReport, CursorUsageResponse } from '../interfaces/types';
 import { fetchCursorStats, getCurrentUsageLimit } from '../services/api';
 import { getCursorTokenFromDB } from '../services/database';
 import { log, getLogHistory } from './logger';
-import { getTeamUsage, checkTeamMembership } from '../services/team';
+import { getTeamSpend, checkTeamMembership } from '../services/team';
 import { getExtensionContext } from '../extension';
 import { t } from './i18n';
 
@@ -30,7 +30,7 @@ export async function generateReport(): Promise<{ reportPath: string; success: b
         usageLimitResponse: null,
         premiumUsage: null,
         teamInfo: null,
-        teamUsage: null,
+        teamSpend: null,
         rawResponses: {},
         logs: getLogHistory().reverse(),
         errors: {}
@@ -93,9 +93,11 @@ export async function generateReport(): Promise<{ reportPath: string; success: b
                 }),
             
             // Get premium usage directly
-            axios.get<CursorUsageResponse>('https://www.cursor.com/api/usage', {
+            axios.get<CursorUsageResponse>('https://cursor.com/api/usage', {
                 params: { user: userId },
-                headers: { Cookie: `WorkosCursorSessionToken=${token}` }
+                headers: { 
+                    Cookie: `WorkosCursorSessionToken=${token}` 
+                }
             })
                 .then(response => {
                     report.premiumUsage = response.data;
@@ -118,34 +120,35 @@ export async function generateReport(): Promise<{ reportPath: string; success: b
                     report.rawResponses.teamInfo = teamInfo;
                     log('[Report] Successfully fetched team membership info');
                     
-                    // If user is a team member, fetch team usage
+                    // If user is a team member, fetch team spend data
                     if (teamInfo.isTeamMember && teamInfo.teamId) {
-                        return getTeamUsage(token, teamInfo.teamId)
-                            .then(teamUsage => {
-                                report.teamUsage = teamUsage;
-                                report.rawResponses.teamUsage = teamUsage;
-                                log('[Report] Successfully fetched team usage data');
+                        return getTeamSpend(token, teamInfo.teamId)
+                            .then(teamSpend => {
+                                report.teamSpend = teamSpend;
+                                report.rawResponses.teamSpend = teamSpend;
+                                log('[Report] Successfully fetched team spend data');
                             })
-                            .catch(error => {
-                                report.errors.teamUsage = `Error fetching team usage: ${error.message}`;
-                                log('[Report] Error fetching team usage: ' + error.message, true);
+                            .catch((error: any) => {
+                                report.errors.teamSpend = `Error fetching team spend: ${error.message}`;
+                                log('[Report] Error fetching team spend: ' + error.message, true);
                             });
                     }
                     // Return a resolved promise if user is not a team member
                     return Promise.resolve();
                 })
-                .catch(error => {
+                .catch((error: any) => {
                     report.errors.teamInfo = `Error checking team membership: ${error.message}`;
                     log('[Report] Error checking team membership: ' + error.message, true);
                 }),
 
             // Get current month invoice data
-            axios.post('https://www.cursor.com/api/dashboard/get-monthly-invoice', {
+            axios.post('https://cursor.com/api/dashboard/get-monthly-invoice', {
                 month: usageBasedCurrentMonth,
                 year: usageBasedCurrentYear,
                 includeUsageEvents: false
             }, {
                 headers: {
+                    'Content-Type': 'application/json',
                     Cookie: `WorkosCursorSessionToken=${token}`
                 }
             })
@@ -162,12 +165,13 @@ export async function generateReport(): Promise<{ reportPath: string; success: b
                 }),
 
             // Get last month invoice data
-            axios.post('https://www.cursor.com/api/dashboard/get-monthly-invoice', {
+            axios.post('https://cursor.com/api/dashboard/get-monthly-invoice', {
                 month: usageBasedLastMonth,
                 year: usageBasedLastYear,
                 includeUsageEvents: false
             }, {
                 headers: {
+                    'Content-Type': 'application/json',
                     Cookie: `WorkosCursorSessionToken=${token}`
                 }
             })

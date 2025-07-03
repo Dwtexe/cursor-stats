@@ -1,17 +1,19 @@
 import axios from 'axios';
 import { CursorStats, UsageLimitResponse, ExtendedAxiosError, UsageItem, CursorUsageResponse } from '../interfaces/types';
 import { log } from '../utils/logger';
-import { checkTeamMembership, getTeamUsage, extractUserUsage } from './team';
+import { checkTeamMembership, getTeamSpend, extractUserSpend } from './team';
 import { getExtensionContext } from '../extension';
 import { t } from '../utils/i18n';
 import * as fs from 'fs';
 
-export async function getCurrentUsageLimit(token: string): Promise<UsageLimitResponse> {
+export async function getCurrentUsageLimit(token: string, teamId?: number): Promise<UsageLimitResponse> {
     try {
-        const response = await axios.post('https://www.cursor.com/api/dashboard/get-hard-limit', 
-            {}, // empty JSON body
+        const payload = teamId ? { teamId } : {};
+        const response = await axios.post('https://cursor.com/api/dashboard/get-hard-limit', 
+            payload,
             {
                 headers: {
+                    'Content-Type': 'application/json',
                     Cookie: `WorkosCursorSessionToken=${token}`
                 }
             }
@@ -25,13 +27,14 @@ export async function getCurrentUsageLimit(token: string): Promise<UsageLimitRes
 
 export async function setUsageLimit(token: string, hardLimit: number, noUsageBasedAllowed: boolean): Promise<void> {
     try {
-        await axios.post('https://www.cursor.com/api/dashboard/set-hard-limit', 
+        await axios.post('https://cursor.com/api/dashboard/set-hard-limit', 
             {
                 hardLimit,
                 noUsageBasedAllowed
             },
             {
                 headers: {
+                    'Content-Type': 'application/json',
                     Cookie: `WorkosCursorSessionToken=${token}`
                 }
             }
@@ -43,15 +46,42 @@ export async function setUsageLimit(token: string, hardLimit: number, noUsageBas
     }
 }
 
-export async function checkUsageBasedStatus(token: string): Promise<{isEnabled: boolean, limit?: number}> {
+export async function checkUsageBasedStatus(token: string, teamId?: number): Promise<{isEnabled: boolean, limit?: number}> {
     try {
-        const response = await getCurrentUsageLimit(token);
+        // Use the same endpoint that the web dashboard uses
+        const payload = teamId ? { teamId } : {};
+        log(`[API] Checking usage-based status with payload: ${JSON.stringify(payload)}`);
+        
+        const response = await axios.post('https://cursor.com/api/dashboard/get-usage-based-premium-requests', 
+            payload,
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: `WorkosCursorSessionToken=${token}`
+                }
+            }
+        );
+        
+        log(`[API] Usage-based status response: ${JSON.stringify(response.data)}`);
+        
+        // Get the hard limit to determine the spending limit
+        const limitResponse = await getCurrentUsageLimit(token, teamId);
+        log(`[API] Hard limit response: ${JSON.stringify(limitResponse)}`);
+        
+        const isEnabled = response.data.usageBasedPremiumRequests === true;
+        log(`[API] Usage-based pricing is ${isEnabled ? 'enabled' : 'disabled'}`);
+        
         return {
-            isEnabled: !response.noUsageBasedAllowed,
-            limit: response.hardLimit
+            isEnabled: isEnabled,
+            limit: limitResponse.hardLimit
         };
     } catch (error: any) {
         log(`[API] Error checking usage-based status: ${error.message}`, true);
+        log(`[API] Error details: ${JSON.stringify({
+            status: error.response?.status,
+            data: error.response?.data,
+            teamId: teamId
+        })}`, true);
         return {
             isEnabled: false
         };
@@ -76,12 +106,13 @@ async function fetchMonthData(token: string, month: number, year: number): Promi
                 throw devError;
             }
         } else {
-            response = await axios.post('https://www.cursor.com/api/dashboard/get-monthly-invoice', {
+            response = await axios.post('https://cursor.com/api/dashboard/get-monthly-invoice', {
                 month,
                 year,
                 includeUsageEvents: false
             }, {
                 headers: {
+                    'Content-Type': 'application/json',
                     Cookie: `WorkosCursorSessionToken=${token}`
                 }
             });
@@ -289,30 +320,70 @@ export async function fetchCursorStats(token: string): Promise<CursorStats> {
         const teamInfo = await checkTeamMembership(token, context);
 
         let premiumRequests;
+        let isUsingTeamSpend = false;
+        
         if (teamInfo.isTeamMember && teamInfo.teamId && teamInfo.userId) {
-            // Fetch team usage for team members
-            log('[API] Fetching team usage data...');
-            const teamUsage = await getTeamUsage(token, teamInfo.teamId);
-            const userUsage = extractUserUsage(teamUsage, teamInfo.userId);
-            
-            premiumRequests = {
-                current: userUsage.numRequests,
-                limit: userUsage.maxRequestUsage,
-                startOfMonth: teamInfo.startOfMonth
-            };
-            log('[API] Successfully extracted team member usage data');
-        } else {
-            const premiumResponse = await axios.get<CursorUsageResponse>('https://www.cursor.com/api/usage', {
+            // Use team spend data for team members to get team-specific usage
+            log('[API] User is team member, fetching team spend data...');
+            try {
+                const teamSpend = await getTeamSpend(token, teamInfo.teamId);
+                const userSpend = extractUserSpend(teamSpend, teamInfo.userId);
+                
+                // Get individual usage to get the premium request limit (GPT-4)
+                const individualUsage = await axios.get<CursorUsageResponse>('https://cursor.com/api/usage', {
+                    params: { user: userId },
+                    headers: { Cookie: `WorkosCursorSessionToken=${token}` }
+                });
+                
+                // Use GPT-4 data for both current usage and limit since it updates faster
+                const premiumRequestLimit = individualUsage.data['gpt-4'].maxRequestUsage || 500;
+                
+                premiumRequests = {
+                    current: individualUsage.data['gpt-4'].numRequests, // Use GPT-4 number instead of team spend
+                    limit: premiumRequestLimit, // Use the premium request limit (500)
+                    startOfMonth: teamInfo.startOfMonth
+                };
+                
+                log('[API] Successfully extracted team member data with premium request limit', {
+                    teamPremiumRequests: userSpend.fastPremiumRequests || 0,
+                    individualPremiumRequests: individualUsage.data['gpt-4'].numRequests,
+                    premiumRequestLimit: premiumRequestLimit,
+                    usageBasedLimit: individualUsage.data['gpt-4-32k'].maxRequestUsage,
+                    usageBasedCurrent: individualUsage.data['gpt-4-32k'].numRequests,
+                    hardLimitOverrideDollars: userSpend.hardLimitOverrideDollars,
+                    userName: userSpend.name,
+                    usingGPT4Number: true // Log that we're using GPT-4 number
+                });
+                
+                isUsingTeamSpend = true;
+            } catch (spendError: any) {
+                log('[API] Team spend failed, falling back to individual usage API: ' + spendError.message, true);
+                // Fall through to individual API
+            }
+        }
+        
+        // Fallback to individual usage API if team methods failed or user is not a team member
+        if (!premiumRequests) {
+            log('[API] Using individual usage API...');
+            const usageResponse = await axios.get<CursorUsageResponse>('https://cursor.com/api/usage', {
                 params: { user: userId },
                 headers: {
                     Cookie: `WorkosCursorSessionToken=${token}`
                 }
             });
 
+            const usageData = usageResponse.data;
+            log('[API] Successfully fetched individual usage data', {
+                gpt4Requests: usageData['gpt-4'].numRequests,
+                gpt4Limit: usageData['gpt-4'].maxRequestUsage,
+                gpt4Tokens: usageData['gpt-4'].numTokens,
+                startOfMonth: usageData.startOfMonth
+            });
+
             premiumRequests = {
-                current: premiumResponse.data['gpt-4'].numRequests,
-                limit: premiumResponse.data['gpt-4'].maxRequestUsage,
-                startOfMonth: premiumResponse.data.startOfMonth
+                current: usageData['gpt-4'].numRequests,
+                limit: usageData['gpt-4'].maxRequestUsage,
+                startOfMonth: usageData.startOfMonth
             };
         }
 
@@ -338,6 +409,8 @@ export async function fetchCursorStats(token: string): Promise<CursorStats> {
         const currentMonthData = await fetchMonthData(token, usageBasedCurrentMonth, usageBasedCurrentYear);
         const lastMonthData = await fetchMonthData(token, usageBasedLastMonth, usageBasedLastYear);
 
+        log(`[API] Returning stats with teamId: ${teamInfo.teamId}, isTeamSpendData: ${isUsingTeamSpend}`);
+        
         return {
             currentMonth: {
                 month: usageBasedCurrentMonth,
@@ -349,7 +422,9 @@ export async function fetchCursorStats(token: string): Promise<CursorStats> {
                 year: usageBasedLastYear,
                 usageBasedPricing: lastMonthData
             },
-            premiumRequests
+            premiumRequests,
+            isTeamSpendData: isUsingTeamSpend,
+            teamId: teamInfo.teamId
         };
     } catch (error: any) {
         log('[API] Error fetching premium requests: ' + error, true);
@@ -364,7 +439,7 @@ export async function fetchCursorStats(token: string): Promise<CursorStats> {
 
 export async function getStripeSessionUrl(token: string): Promise<string> {
     try {
-        const response = await axios.get('https://www.cursor.com/api/stripeSession', {
+        const response = await axios.get('https://cursor.com/api/stripeSession', {
             headers: {
                 Cookie: `WorkosCursorSessionToken=${token}`
             }

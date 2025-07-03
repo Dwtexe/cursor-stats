@@ -2,7 +2,7 @@
   "statusBar": {
     "premiumFastRequests": "Премиум Быстрые Запросы",
     "usageBasedPricing": "Ценообразование по Использованию",
-    "teamUsage": "Использование Команды",
+    "teamSpend": "Расходы Команды",
     "period": "Период",
     "utilized": "использовано",
     "used": "использовано",

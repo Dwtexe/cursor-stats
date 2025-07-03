@@ -2,7 +2,7 @@
   "statusBar": {
     "premiumFastRequests": "プレミアム高速リクエスト",
     "usageBasedPricing": "使用量ベース課金",
-    "teamUsage": "チーム使用状況",
+    "teamSpend": "チーム支出",
     "period": "期間",
     "utilized": "使用済み",
     "used": "使用済み",

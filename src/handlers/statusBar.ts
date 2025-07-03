@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import { log } from '../utils/logger';
-import { getCurrentUsageLimit } from '../services/api';
+import { getCurrentUsageLimit, checkUsageBasedStatus } from '../services/api';
 import { getCursorTokenFromDB } from '../services/database';
 import { convertAndFormatCurrency } from '../utils/currency';
 import { t } from '../utils/i18n';
+import { getExtensionContext } from '../extension';
+import { checkTeamMembership } from '../services/team';
 import {
   shouldShowProgressBars,
   createPeriodProgressBar, 
@@ -191,8 +193,14 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
 
         if (token) {
             try {
-                const limitResponse = await getCurrentUsageLimit(token);
-                isEnabled = !limitResponse.noUsageBasedAllowed;
+                // Check if user is a team member to pass teamId to the usage-based status check
+                const context = getExtensionContext();
+                const teamInfo = await checkTeamMembership(token, context);
+                
+                // Use the new checkUsageBasedStatus function with teamId if available
+                const usageStatus = await checkUsageBasedStatus(token, teamInfo.teamId);
+                isEnabled = usageStatus.isEnabled;
+                const limitResponse = await getCurrentUsageLimit(token, teamInfo.teamId);
                 
                 // Find the original USD data from allLines
                 let originalUsageData = null;
