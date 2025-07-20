@@ -78,23 +78,36 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
         let usageBasedPercent = 0;
         let totalUsageText = '';
 
-        // Use current month if it has data, otherwise fall back to last month
-        const activeMonthData = stats.currentMonth.usageBasedPricing.items.length > 0 
+        // Use current month if it has data or if we have team spend data, otherwise fall back to last month
+        const activeMonthData = (stats.currentMonth.usageBasedPricing.items.length > 0 || 
+                                (stats.isTeamSpendData && stats.teamSpendCents !== undefined)) 
             ? stats.currentMonth 
             : stats.lastMonth;
         
         log(`[Stats] Using ${activeMonthData === stats.currentMonth ? 'current' : 'last'} month data (${activeMonthData.month}/${activeMonthData.year})`);
         
-        if (activeMonthData.usageBasedPricing.items.length > 0) {
+        // For team members, prioritize team spend data if available
+        let actualTotalCost = 0;
+        let useTeamSpendData = false;
+        
+        if (stats.isTeamSpendData && stats.teamSpendCents !== undefined) {
+            // Use team spend data (convert from cents to dollars)
+            actualTotalCost = stats.teamSpendCents / 100;
+            useTeamSpendData = true;
+            log(`[Stats] Using team spend data: ${stats.teamSpendCents} cents = $${actualTotalCost.toFixed(2)}`);
+        } else if (activeMonthData.usageBasedPricing.items.length > 0) {
             const items = activeMonthData.usageBasedPricing.items;
             
-            // Calculate actual total cost (sum of positive items only)
-            const actualTotalCost = items.reduce((sum, item) => {
+            // Calculate actual total cost (sum of positive items only) - fallback for non-team members
+            actualTotalCost = items.reduce((sum, item) => {
                 const cost = parseFloat(item.totalDollars.replace('$', ''));
                 // Only add positive costs (ignore mid-month payment credits)
                 return cost > 0 ? sum + cost : sum;
             }, 0);
-
+            log(`[Stats] Using monthly invoice data: $${actualTotalCost.toFixed(2)}`);
+        }
+        
+        if (actualTotalCost > 0 || useTeamSpendData) {
             // Usage-based requests are tracked separately and not added to the premium count
             
             // Calculate usage percentage based on actual total cost (always in USD)
@@ -262,34 +275,31 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
             contentLines.push(t('statusBar.usageBasedPricing'));
         }
         
-        if (activeMonthData.usageBasedPricing.items.length > 0) {
-            const items = activeMonthData.usageBasedPricing.items;
-
-            // Calculate actual total cost (sum of positive items only)
-            const actualTotalCost = items.reduce((sum, item) => {
-                const cost = parseFloat(item.totalDollars.replace('$', ''));
-                return cost > 0 ? sum + cost : sum;
-            }, 0);
+        if (actualTotalCost > 0 || useTeamSpendData || activeMonthData.usageBasedPricing.items.length > 0) {
+            // Use the same billing cycle as premium requests since they share the same subscription start
+            const subscriptionStart = new Date(stats.premiumRequests.startOfMonth);
             
-            // Calculate usage-based pricing period for the active month
-            const billingDay = 3;
-            let periodStart = new Date(activeMonthData.year, activeMonthData.month - 1, billingDay);
-            let periodEnd = new Date(activeMonthData.year, activeMonthData.month, billingDay - 1);
+            // Calculate the period start for the active month data
+            let periodStart = new Date(subscriptionStart);
+            periodStart.setMonth(subscriptionStart.getMonth());
+            periodStart.setFullYear(subscriptionStart.getFullYear());
             
-            // Adjust year if period spans across year boundary
-            if (periodEnd < periodStart) {
-                periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-            }
+            // Adjust to the active month's billing cycle
+            const monthDiff = (activeMonthData.year - subscriptionStart.getFullYear()) * 12 + 
+                             (activeMonthData.month - 1 - subscriptionStart.getMonth());
+            periodStart.setMonth(subscriptionStart.getMonth() + monthDiff);
+            periodStart.setFullYear(subscriptionStart.getFullYear() + Math.floor((subscriptionStart.getMonth() + monthDiff) / 12));
+            
+            // Calculate period end (same day of next month, matching premium requests logic)
+            let periodEnd = new Date(periodStart);
+            periodEnd.setMonth(periodEnd.getMonth() + 1);
             
             contentLines.push(
                 formatTooltipLine(`   ${t('statusBar.usageBasedPeriod')}: ${formatDateWithMonthName(periodStart)} - ${formatDateWithMonthName(periodEnd)}`),
             );
             
-            // Calculate unpaid amount correctly
-            const unpaidAmount = Math.max(0, actualTotalCost - activeMonthData.usageBasedPricing.midMonthPayment);
-            
-            // Calculate usage percentage based on actual total cost (always in USD)
-            const usagePercentage = usageStatus.limit ? ((actualTotalCost / usageStatus.limit) * 100).toFixed(1) : '0.0';
+            // Calculate unpaid amount correctly (only for monthly invoice data, team spend is always current)
+            const unpaidAmount = useTeamSpendData ? 0 : Math.max(0, actualTotalCost - activeMonthData.usageBasedPricing.midMonthPayment);
             
             // Convert currency for tooltip
             const currencyCode = getCurrentCurrency();
@@ -301,10 +311,17 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
             const originalUsageData = {
                 usdTotalCost: actualTotalCost, // Use actual cost here
                 usdLimit: usageStatus.limit || 0,
-                percentage: usagePercentage
+                percentage: usageBasedPercent
             };
             
-            if (activeMonthData.usageBasedPricing.midMonthPayment > 0) {
+            if (useTeamSpendData) {
+                // For team spend data, show current usage without unpaid amount
+                contentLines.push(
+                    formatTooltipLine(`   ${t('statusBar.currentUsage')}: ${formattedActualTotalCost}`),
+                    formatTooltipLine(`   __USD_USAGE_DATA__:${JSON.stringify(originalUsageData)}`), // Hidden metadata line
+                    ''
+                );
+            } else if (activeMonthData.usageBasedPricing.midMonthPayment > 0) {
                 contentLines.push(
                     formatTooltipLine(`   ${t('statusBar.currentUsage')} (${t('statusBar.total')}: ${formattedActualTotalCost} - ${t('statusBar.unpaid')}: ${formattedUnpaidAmount})`),
                     formatTooltipLine(`   __USD_USAGE_DATA__:${JSON.stringify(originalUsageData)}`), // Hidden metadata line
@@ -318,144 +335,149 @@ export async function updateStats(statusBarItem: vscode.StatusBarItem) {
                 );
             }
             
-            // Determine the maximum length for formatted item costs for padding
-            let maxFormattedItemCostLength = 0;
-            for (const item of items) {
-                if (item.description?.includes('Mid-month usage paid')) {
-                    continue;
-                }
-                const itemCost = parseFloat(item.totalDollars.replace('$', ''));
-                // We format with 2 decimal places for display
-                const tempFormattedCost = itemCost.toFixed(2); // Format to string with 2 decimals
-                if (tempFormattedCost.length > maxFormattedItemCostLength) {
-                    maxFormattedItemCostLength = tempFormattedCost.length;
-                }
-            }
-
-            for (const item of items) {
-                // Skip mid-month payment line item from the detailed list
-                if (item.description?.includes('Mid-month usage paid')) {
-                    continue;
+            // Only show detailed breakdown for monthly invoice data (not team spend)
+            if (!useTeamSpendData && activeMonthData.usageBasedPricing.items.length > 0) {
+                const items = activeMonthData.usageBasedPricing.items;
+                
+                // Determine the maximum length for formatted item costs for padding
+                let maxFormattedItemCostLength = 0;
+                for (const item of items) {
+                    if (item.description?.includes('Mid-month usage paid')) {
+                        continue;
+                    }
+                    const itemCost = parseFloat(item.totalDollars.replace('$', ''));
+                    // We format with 2 decimal places for display
+                    const tempFormattedCost = itemCost.toFixed(2); // Format to string with 2 decimals
+                    if (tempFormattedCost.length > maxFormattedItemCostLength) {
+                        maxFormattedItemCostLength = tempFormattedCost.length;
+                    }
                 }
 
-                // If the item has a description, use it to provide better context
-                if (item.description) {
-                    // Logic for populating detectedUnknownModels for the notification
-                    // This now uses modelNameForTooltip as a primary signal from api.ts
-                    if (item.modelNameForTooltip === "unknown-model" && item.description) {
-                        // api.ts couldn't determine a specific model.
-                        // Let's inspect the raw description for a hint for the notification.
-                        let extractedTermForNotification = "";
+                for (const item of items) {
+                    // Skip mid-month payment line item from the detailed list
+                    if (item.description?.includes('Mid-month usage paid')) {
+                        continue;
+                    }
 
-                        // Try to extract model name from specific patterns first
-                        const tokenBasedDescMatch = item.description.match(/^(\d+) token-based usage calls to ([\w.-]+),/i);
-                        if (tokenBasedDescMatch && tokenBasedDescMatch[2]) {
-                            extractedTermForNotification = tokenBasedDescMatch[2].trim();
-                        } else {
-                            const extraFastMatch = item.description.match(/extra fast premium requests? \(([^)]+)\)/i);
-                            if (extraFastMatch && extraFastMatch[1]) {
-                                extractedTermForNotification = extraFastMatch[1].trim();
+                    // If the item has a description, use it to provide better context
+                    if (item.description) {
+                        // Logic for populating detectedUnknownModels for the notification
+                        // This now uses modelNameForTooltip as a primary signal from api.ts
+                        if (item.modelNameForTooltip === "unknown-model" && item.description) {
+                            // api.ts couldn't determine a specific model.
+                            // Let's inspect the raw description for a hint for the notification.
+                            let extractedTermForNotification = "";
+
+                            // Try to extract model name from specific patterns first
+                            const tokenBasedDescMatch = item.description.match(/^(\d+) token-based usage calls to ([\w.-]+),/i);
+                            if (tokenBasedDescMatch && tokenBasedDescMatch[2]) {
+                                extractedTermForNotification = tokenBasedDescMatch[2].trim();
                             } else {
-                                // General case: "N ACTUAL_MODEL_NAME_OR_PHRASE requests/calls"
-                                const fullDescMatch = item.description.match(/^(\d+)\s+(.+?)(?: request| calls)?(?: beyond|\*| per|$)/i);
-                                if (fullDescMatch && fullDescMatch[2]) {
-                                    extractedTermForNotification = fullDescMatch[2].trim();
-                                    // If it's discounted and starts with "discounted ", remove prefix
-                                    if (item.isDiscounted && extractedTermForNotification.toLowerCase().startsWith("discounted ")) {
-                                        extractedTermForNotification = extractedTermForNotification.substring(11).trim();
-                                    }
+                                const extraFastMatch = item.description.match(/extra fast premium requests? \(([^)]+)\)/i);
+                                if (extraFastMatch && extraFastMatch[1]) {
+                                    extractedTermForNotification = extraFastMatch[1].trim();
                                 } else {
-                                    // Fallback: first word after number if other patterns fail (less likely to be useful)
-                                    const simpleDescMatch = item.description.match(/^(\d+)\s+([\w.-]+)/i); // Changed to [\w.-]+
-                                    if (simpleDescMatch && simpleDescMatch[2]) {
-                                        extractedTermForNotification = simpleDescMatch[2].trim();
+                                    // General case: "N ACTUAL_MODEL_NAME_OR_PHRASE requests/calls"
+                                    const fullDescMatch = item.description.match(/^(\d+)\s+(.+?)(?: request| calls)?(?: beyond|\*| per|$)/i);
+                                    if (fullDescMatch && fullDescMatch[2]) {
+                                        extractedTermForNotification = fullDescMatch[2].trim();
+                                        // If it's discounted and starts with "discounted ", remove prefix
+                                        if (item.isDiscounted && extractedTermForNotification.toLowerCase().startsWith("discounted ")) {
+                                            extractedTermForNotification = extractedTermForNotification.substring(11).trim();
+                                        }
+                                    } else {
+                                        // Fallback: first word after number if other patterns fail (less likely to be useful)
+                                        const simpleDescMatch = item.description.match(/^(\d+)\s+([\w.-]+)/i); // Changed to [\w.-]+
+                                        if (simpleDescMatch && simpleDescMatch[2]) {
+                                            extractedTermForNotification = simpleDescMatch[2].trim();
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // General cleanup of suffixes
+                            extractedTermForNotification = extractedTermForNotification.replace(/requests?|calls?|beyond|\*|per|,$/gi, '').trim();
+                            if (extractedTermForNotification.toLowerCase().endsWith(" usage")) {
+                                extractedTermForNotification = extractedTermForNotification.substring(0, extractedTermForNotification.length - 6).trim();
+                            }
+                            // Ensure it's not an empty string after cleanup
+                            if (extractedTermForNotification && 
+                                extractedTermForNotification.length > 1 && // Meaningful length
+                                extractedTermForNotification.toLowerCase() !== "token-based" &&
+                                extractedTermForNotification.toLowerCase() !== "discounted") {
+
+                                const veryGenericKeywords = [
+                                    'usage', 'calls', 'request', 'requests', 'cents', 'beyond', 'month', 'day',
+                                    'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+                                    'premium', 'extra', 'tool', 'fast', 'thinking'
+                                    // Model families like 'claude', 'gpt', 'gemini', 'o1' etc. are NOT here, 
+                                    // as "claude-x" should be flagged if "claude-x" is new.
+                                ];
+                                
+                                const isVeryGeneric = veryGenericKeywords.includes(extractedTermForNotification.toLowerCase());
+
+                                if (!isVeryGeneric) {
+                                    const alreadyPresent = Array.from(detectedUnknownModels).some(d => d.toLowerCase().includes(extractedTermForNotification.toLowerCase()) || extractedTermForNotification.toLowerCase().includes(d.toLowerCase()));
+                                    if (!alreadyPresent) {
+                                        detectedUnknownModels.add(extractedTermForNotification);
+                                        log(`[Stats] Adding to detectedUnknownModels (api.ts flagged as unknown-model, extracted term): '${extractedTermForNotification}' from "${item.description}"`);
                                     }
                                 }
                             }
                         }
                         
-                        // General cleanup of suffixes
-                        extractedTermForNotification = extractedTermForNotification.replace(/requests?|calls?|beyond|\*|per|,$/gi, '').trim();
-                        if (extractedTermForNotification.toLowerCase().endsWith(" usage")) {
-                            extractedTermForNotification = extractedTermForNotification.substring(0, extractedTermForNotification.length - 6).trim();
-                        }
-                        // Ensure it's not an empty string after cleanup
-                        if (extractedTermForNotification && 
-                            extractedTermForNotification.length > 1 && // Meaningful length
-                            extractedTermForNotification.toLowerCase() !== "token-based" &&
-                            extractedTermForNotification.toLowerCase() !== "discounted") {
+                        // Convert item cost for display
+                        const itemCost = parseFloat(item.totalDollars.replace('$', ''));
+                        let formattedItemCost = await convertAndFormatCurrency(itemCost);
 
-                            const veryGenericKeywords = [
-                                'usage', 'calls', 'request', 'requests', 'cents', 'beyond', 'month', 'day',
-                                'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
-                                'premium', 'extra', 'tool', 'fast', 'thinking'
-                                // Model families like 'claude', 'gpt', 'gemini', 'o1' etc. are NOT here, 
-                                // as "claude-x" should be flagged if "claude-x" is new.
-                            ];
-                            
-                            const isVeryGeneric = veryGenericKeywords.includes(extractedTermForNotification.toLowerCase());
+                        // Pad the numerical part of the formattedItemCost
+                        const currencySymbol = formattedItemCost.match(/^[^0-9-.\\,]*/)?.[0] || "";
+                        const numericalPart = formattedItemCost.substring(currencySymbol.length);
+                        const paddedNumericalPart = numericalPart.padStart(maxFormattedItemCostLength, '0');
+                        formattedItemCost = currencySymbol + paddedNumericalPart;
+                        
+                        let line = `   • ${item.calculation} ➜ &nbsp;&nbsp;**${formattedItemCost}**`;
+                        const modelName = item.modelNameForTooltip;
+                        let modelNameDisplay = ""; // Initialize for the model name part of the string
 
-                            if (!isVeryGeneric) {
-                                const alreadyPresent = Array.from(detectedUnknownModels).some(d => d.toLowerCase().includes(extractedTermForNotification.toLowerCase()) || extractedTermForNotification.toLowerCase().includes(d.toLowerCase()));
-                                if (!alreadyPresent) {
-                                    detectedUnknownModels.add(extractedTermForNotification);
-                                    log(`[Stats] Adding to detectedUnknownModels (api.ts flagged as unknown-model, extracted term): '${extractedTermForNotification}' from "${item.description}"`);
-                                }
+                        if (modelName) { // Make sure modelName is there
+                            const isDiscounted = item.description && item.description.toLowerCase().includes("discounted");
+                            const isUnknown = modelName === "unknown-model";
+
+                            if (isDiscounted) {
+                                modelNameDisplay = `(${t('statusBar.discounted')} | ${isUnknown ? t('statusBar.unknownModel') : modelName})`;
+                            } else if (isUnknown) {
+                                modelNameDisplay = `(${t('statusBar.unknownModel')})`;
+                            } else {
+                                modelNameDisplay = `(${modelName})`;
                             }
                         }
-                    }
-                    
-                    // Convert item cost for display
-                    const itemCost = parseFloat(item.totalDollars.replace('$', ''));
-                    let formattedItemCost = await convertAndFormatCurrency(itemCost);
+                        // If modelName was undefined or null, modelNameDisplay remains empty.
 
-                    // Pad the numerical part of the formattedItemCost
-                    const currencySymbol = formattedItemCost.match(/^[^0-9-.\\,]*/)?.[0] || "";
-                    const numericalPart = formattedItemCost.substring(currencySymbol.length);
-                    const paddedNumericalPart = numericalPart.padStart(maxFormattedItemCostLength, '0');
-                    formattedItemCost = currencySymbol + paddedNumericalPart;
-                    
-                    let line = `   • ${item.calculation} ➜ &nbsp;&nbsp;**${formattedItemCost}**`;
-                    const modelName = item.modelNameForTooltip;
-                    let modelNameDisplay = ""; // Initialize for the model name part of the string
-
-                    if (modelName) { // Make sure modelName is there
-                        const isDiscounted = item.description && item.description.toLowerCase().includes("discounted");
-                        const isUnknown = modelName === "unknown-model";
-
-                        if (isDiscounted) {
-                            modelNameDisplay = `(${t('statusBar.discounted')} | ${isUnknown ? t('statusBar.unknownModel') : modelName})`;
-                        } else if (isUnknown) {
-                            modelNameDisplay = `(${t('statusBar.unknownModel')})`;
-                        } else {
-                            modelNameDisplay = `(${modelName})`;
+                        if (modelNameDisplay) { // Only add spacing and display string if it's not empty
+                            const desiredTotalWidth = 70; // Adjust as needed for good visual alignment
+                            const currentLineWidth = line.replace(/\*\*/g, '').replace(/&nbsp;/g, ' ').length; // Approx length without markdown & html spaces
+                            const modelNameDisplayLength = modelNameDisplay.replace(/&nbsp;/g, ' ').length;
+                            const spacesNeeded = Math.max(1, desiredTotalWidth - currentLineWidth - modelNameDisplayLength);
+                            line += ' '.repeat(spacesNeeded) + `&nbsp;&nbsp;&nbsp;&nbsp;${modelNameDisplay}`;
                         }
+                        contentLines.push(formatTooltipLine(line));
+
+                    } else {
+                        // Fallback for items without a description (should be rare but handle it)
+                        const itemCost = parseFloat(item.totalDollars.replace('$', ''));
+                        let formattedItemCost = await convertAndFormatCurrency(itemCost);
+
+                        // Pad the numerical part of the formattedItemCost
+                        const currencySymbol = formattedItemCost.match(/^[^0-9-.\\,]*/)?.[0] || "";
+                        const numericalPart = formattedItemCost.substring(currencySymbol.length);
+                        const paddedNumericalPart = numericalPart.padStart(maxFormattedItemCostLength, '0');
+                        formattedItemCost = currencySymbol + paddedNumericalPart;
+                        
+                        // Use a generic calculation string if item.calculation is also missing, or the original if available
+                        const calculationString = item.calculation || t('statusBar.unknownItem'); 
+                        contentLines.push(formatTooltipLine(`   • ${calculationString} ➜ &nbsp;&nbsp;**${formattedItemCost}**`));
                     }
-                    // If modelName was undefined or null, modelNameDisplay remains empty.
-
-                    if (modelNameDisplay) { // Only add spacing and display string if it's not empty
-                        const desiredTotalWidth = 70; // Adjust as needed for good visual alignment
-                        const currentLineWidth = line.replace(/\*\*/g, '').replace(/&nbsp;/g, ' ').length; // Approx length without markdown & html spaces
-                        const modelNameDisplayLength = modelNameDisplay.replace(/&nbsp;/g, ' ').length;
-                        const spacesNeeded = Math.max(1, desiredTotalWidth - currentLineWidth - modelNameDisplayLength);
-                        line += ' '.repeat(spacesNeeded) + `&nbsp;&nbsp;&nbsp;&nbsp;${modelNameDisplay}`;
-                    }
-                    contentLines.push(formatTooltipLine(line));
-
-                } else {
-                    // Fallback for items without a description (should be rare but handle it)
-                    const itemCost = parseFloat(item.totalDollars.replace('$', ''));
-                    let formattedItemCost = await convertAndFormatCurrency(itemCost);
-
-                    // Pad the numerical part of the formattedItemCost
-                    const currencySymbol = formattedItemCost.match(/^[^0-9-.\\,]*/)?.[0] || "";
-                    const numericalPart = formattedItemCost.substring(currencySymbol.length);
-                    const paddedNumericalPart = numericalPart.padStart(maxFormattedItemCostLength, '0');
-                    formattedItemCost = currencySymbol + paddedNumericalPart;
-                    
-                    // Use a generic calculation string if item.calculation is also missing, or the original if available
-                    const calculationString = item.calculation || t('statusBar.unknownItem'); 
-                    contentLines.push(formatTooltipLine(`   • ${calculationString} ➜ &nbsp;&nbsp;**${formattedItemCost}**`));
                 }
             }
 

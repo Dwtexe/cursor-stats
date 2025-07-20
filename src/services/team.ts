@@ -214,7 +214,8 @@ export function extractUserSpend(teamSpend: TeamSpendResponse, userId: number) {
         email: userSpend.email,
         role: userSpend.role,
         hardLimitOverrideDollars: userSpend.hardLimitOverrideDollars,
-        fastPremiumRequests: userSpend.fastPremiumRequests || 0
+        fastPremiumRequests: userSpend.fastPremiumRequests || 0,
+        spendCents: userSpend.spendCents || 0
     });
 
     return {
@@ -223,6 +224,7 @@ export function extractUserSpend(teamSpend: TeamSpendResponse, userId: number) {
         email: userSpend.email,
         role: userSpend.role,
         hardLimitOverrideDollars: userSpend.hardLimitOverrideDollars,
-        fastPremiumRequests: userSpend.fastPremiumRequests || 0
+        fastPremiumRequests: userSpend.fastPremiumRequests || 0,
+        spendCents: userSpend.spendCents || 0
     };
 } 

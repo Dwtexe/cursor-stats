@@ -240,28 +240,62 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
                     if (usageBasedPeriodLine) {
                         const periodText = usageBasedPeriodLine.split(':')[1].trim();
                         
-                        // Use the original USD data for percentage calculation if available
-                        let usagePercentage = '0.0';
-                        if (originalUsageData && originalUsageData.percentage) {
-                            usagePercentage = originalUsageData.percentage;
-                        } else {
-                            // Fallback to calculating with converted values
-                            usagePercentage = ((totalCost / limitResponse.hardLimit) * 100).toFixed(1);
+                        // Get team spend data to calculate personal vs team usage
+                        let personalLimit = limitResponse.hardLimit; // Default to team limit
+                        let personalPercentage = '0.0';
+                        let teamPercentage = '0.0';
+                        
+                        try {
+                            if (teamInfo.isTeamMember && teamInfo.teamId && teamInfo.userId) {
+                                const { getTeamSpend, extractUserSpend } = await import('../services/team');
+                                const teamSpend = await getTeamSpend(token, teamInfo.teamId);
+                                const userSpend = extractUserSpend(teamSpend, teamInfo.userId);
+                                
+                                // Get personal limit and calculate personal percentage
+                                personalLimit = userSpend.hardLimitOverrideDollars || 100;
+                                personalPercentage = ((totalCost / personalLimit) * 100).toFixed(1);
+                                teamPercentage = ((totalCost / limitResponse.hardLimit) * 100).toFixed(1);
+                                
+                                log('[Status Bar] Personal vs Team usage calculated', {
+                                    personalSpend: totalCost,
+                                    personalLimit: personalLimit,
+                                    personalPercentage: personalPercentage,
+                                    teamLimit: limitResponse.hardLimit,
+                                    teamPercentage: teamPercentage
+                                });
+                            } else {
+                                // For non-team members, use original logic
+                                personalPercentage = originalUsageData?.percentage || ((totalCost / limitResponse.hardLimit) * 100).toFixed(1);
+                            }
+                        } catch (error: any) {
+                            log('[Status Bar] Error getting team spend data for personal limit: ' + error.message, true);
+                            // Fallback to original calculation
+                            personalPercentage = originalUsageData?.percentage || ((totalCost / limitResponse.hardLimit) * 100).toFixed(1);
                         }
                         
-                        // Convert the limit to the user's preferred currency
-                        const formattedLimit = await convertAndFormatCurrency(limitResponse.hardLimit);
+                        // Convert limits to user's preferred currency
+                        const formattedPersonalLimit = await convertAndFormatCurrency(personalLimit);
+                        const formattedTeamLimit = await convertAndFormatCurrency(limitResponse.hardLimit);
 
                         // Calculate date elapsed percentage for usage-based period
                         const [startDate, endDate] = periodText.split('-').map(d => d.trim());
                         const elapsedPercent = Math.round(calculateDateElapsedPercentage(startDate, endDate));
                         
-                        tooltip.appendMarkdown(`<div align="center">${periodText} (${elapsedPercent}%) ● ${formattedLimit} (${usagePercentage}% | ${formattedTotalCost} ${t('statusBar.used')})</div>\n\n`);
+                        // Display personal and team usage information
+                        if (teamInfo.isTeamMember && personalLimit !== limitResponse.hardLimit) {
+                            // For team members, show both personal and team usage
+                            tooltip.appendMarkdown(`<div align="center">${periodText} (${elapsedPercent}%)</div>\n\n`);
+                            tooltip.appendMarkdown(`<div align="center">**Personal**: ${formattedPersonalLimit} (${personalPercentage}% | ${formattedTotalCost} ${t('statusBar.used')})</div>\n\n`);
+                            tooltip.appendMarkdown(`<div align="center">**Team Total**: ${formattedTeamLimit} (${teamPercentage}% contribution)</div>\n\n`);
+                        } else {
+                            // For individual accounts, show single limit
+                            tooltip.appendMarkdown(`<div align="center">${periodText} (${elapsedPercent}%) ● ${formattedPersonalLimit} (${personalPercentage}% | ${formattedTotalCost} ${t('statusBar.used')})</div>\n\n`);
+                        }
                         
-                        // Add usage-based pricing progress bar
+                        // Add usage-based pricing progress bar (use personal percentage)
                         if (shouldShowProgressBars()) {
                             const usageProgressBar = createUsageProgressBar(
-                                parseFloat(usagePercentage), 
+                                parseFloat(personalPercentage), 
                                 100, 
                                 t('statusBar.usage')
                             );
@@ -333,6 +367,13 @@ export async function createMarkdownTooltip(lines: string[], isError: boolean = 
                         
                         // Use the already formatted informational line, just add the unpaid part dynamically
                         tooltip.appendMarkdown(`> ${informationalMidMonthLine.trim()}. (${t('statusBar.unpaidAmount', { amount: `**${formattedUnpaidAmount}**` })})\n\n`);
+                    }
+                } else if (totalCost > 0) {
+                    // For team spend data or when we have usage but no detailed breakdown
+                    if (teamInfo.isTeamMember) {
+                        tooltip.appendMarkdown(`> 💼 ${t('statusBar.teamSpend')} data: ${formattedTotalCost} current usage\n\n`);
+                    } else {
+                        tooltip.appendMarkdown(`> 💰 Current usage: ${formattedTotalCost}\n\n`);
                     }
                 } else {
                     tooltip.appendMarkdown(`> ℹ️ ${t('statusBar.noUsageRecorded')}\n\n`);

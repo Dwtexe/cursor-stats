@@ -38,6 +38,7 @@ export interface CursorStats {
     };
     isTeamSpendData?: boolean;
     teamId?: number;
+    teamSpendCents?: number; // Add spendCents from team spend data
 }
 
 export interface ProgressBarSettings {
@@ -240,4 +241,5 @@ export interface TeamMemberSpend {
     role: string;
     hardLimitOverrideDollars: number;
     fastPremiumRequests?: number;
+    spendCents?: number;
 } 

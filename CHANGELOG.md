@@ -2,6 +2,28 @@
 
 All notable changes to the "cursor-stats" extension will be documented in this file.
 
+## [1.1.6] - 2025-07-20
+
+### Fixed
+- 🚨 **CRITICAL: Team Spend Data Display**: Fixed missing usage spend data for team members
+  - Extension was not extracting or displaying `spendCents` from team spend API response
+  - Added `spendCents` to TypeScript interfaces and data extraction logic
+  - Team members now see actual current usage (e.g., $4.54) instead of "No usage recorded"
+- 📅 **Billing Cycle Synchronization**: Fixed incorrect usage-based pricing dates
+  - Removed hardcoded assumption that usage-based pricing starts on 3rd of each month
+  - Now uses actual `subscriptionCycleStart` from API data (matches premium request cycle)
+  - Both premium requests and usage-based pricing now show synchronized dates (e.g., "25 June - 25 July")
+- 🎯 **Personal vs Team Usage Display**: Enhanced team member usage presentation
+  - Shows personal limit and percentage (e.g., $4.54/$100 = 4.5%) 
+  - Shows team contribution percentage (e.g., $4.54/$500 = 0.9%)
+  - Progress bars now reflect personal usage percentage instead of team percentage
+  - Fixed floating point precision issues in percentage display
+- 🔧 **Month Selection Logic**: Fixed incorrect month selection for team spend data
+  - Team spend data now correctly uses current month instead of falling back to previous month
+  - Ensures usage-based pricing dates match premium request dates
+- 💼 **Team Spend Messaging**: Replaced "No usage recorded" with proper team spend data display
+  - Shows "Team Spend data: $X.XX current usage" when detailed breakdown unavailable
+
 ## [1.1.5] - 2025-07-03
 
 ### Added
